@@ -1,5 +1,7 @@
 # insight-forge
 
+![Insight Forge](assets/banner.jpg)
+
 ### Your AI sessions know more than you think.
 
 ---
