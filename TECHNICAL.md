@@ -253,6 +253,12 @@ It's specifically designed to be **boring and conservative**. False positives (o
 
 ---
 
+## Design study
+
+For a deep-dive into how the ARA methodology maps to session analysis — pipeline rationale, closure signals, schemas, risk analysis, and phased implementation plan — see **[docs/ara-methodology-study.md](docs/ara-methodology-study.md)**.
+
+---
+
 ## Sources & credits
 
 This skill is a synthesis. The methodology is not original — it adapts and combines several existing ideas. Explicit attribution by component:
