@@ -107,15 +107,21 @@ Proposals are organized by epistemic confidence:
 
 ---
 
+## Incremental by design
+
+insight-forge never re-reads sessions it has already processed.
+
+After each run, it writes a `.last_run` timestamp to `.insight-forge/`. The next run passes that timestamp as `--since` to the extractor — only sessions modified after that date are read. A month later, only the past month's sessions are extracted. Previously processed JSONL files are never touched again.
+
 ## Every mode
 
 ```bash
-/insight-forge                      # Default: scan, crystallize, propose
+/insight-forge                      # Default: scan new sessions only, crystallize, propose
 /insight-forge --challenge          # 6-axis stress-test of crystallized claims
 /insight-forge --council C03        # 5-attacker verdict on a single entry
 /insight-forge --evidence C03       # Show which sessions fed this claim
-/insight-forge --since 2026-04-01   # Reprocess from a specific date
-/insight-forge --rebuild            # Start fresh
+/insight-forge --since 2026-04-01   # Override cursor: process from a specific date
+/insight-forge --rebuild            # Wipe .insight-forge and reprocess everything
 ```
 
 `--council` is gated to once per entry per 30 days. It's the only mode that burns real LLM tokens. Use it on entries you're about to copy into `CLAUDE.md`.

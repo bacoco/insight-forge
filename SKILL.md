@@ -55,21 +55,34 @@ When promoting, also generate a `counter_evidence` field — the Devil's Advocat
 
 ## Per-Run Procedure
 
+Single command — the orchestrator handles everything:
+
+```bash
+python3 scripts/run.py [--project $(pwd)] [--forge-dir .insight-forge]
 ```
-1. Detect agent: presence of ~/.claude/projects/ → claude, ~/.codex/sessions/ → codex.
-   If both: ask user which to scan, or scan both with separate runs.
-2. Resolve project cwd → JSONL discovery:
-   - Claude Code: scripts/extract_claude.py (uses cwd-encoded directory)
-   - Codex CLI:    scripts/extract_codex.py (filters by <environment_context> cwd)
-3. Read .insight-forge/.last_run (or initialize if missing).
-4. Filter: sessions modified after .last_run.
-5. Normalize: scripts/normalize.py → .insight-forge/.cache/normalized.jsonl
-6. Pipeline: scripts/pipeline.py → updates ARA structure
-7. Propose: scripts/propose_claude_md.py → .insight-forge/proposals/<date>.md
-8. Update .last_run.
-9. Print one-line summary:
-   [insight-forge] Scanned N sessions: 3 dead_ends added, 2 claims crystallized,
-   1 contradiction flagged, 5 observations staged, proposals/2026-05-03.md ready.
+
+`run.py` wires the full pipeline automatically:
+1. Reads `.insight-forge/.last_run` to get the cursor timestamp
+2. Detects which agent(s) are present (`~/.claude/projects/` and/or `~/.codex/sessions/`)
+3. Calls the right extractor(s) with `--since <last_run>` — **only new sessions are read**
+4. Merges outputs into `.insight-forge/.cache/normalized.jsonl`
+5. Runs `pipeline.py` (Harvester → Router → Maturity Tracker)
+6. Runs `propose_claude_md.py` → `.insight-forge/proposals/<date>.md`
+7. Updates `.last_run`
+8. Prints one-line summary
+
+If `.last_run` does not exist (first run), all sessions are processed. On every subsequent run, only sessions modified after `.last_run` are extracted — previously processed JSONL files are never re-read.
+
+**Available flags:**
+
+```
+--rebuild               Ignore .last_run, reprocess all sessions from scratch
+--since ISO8601         Override .last_run with an explicit date
+--agent claude|codex    Force a specific agent (default: auto-detect both)
+--challenge             Run Devil's Advocate sweep after crystallization
+--fuzzy-cwd             Codex: include parent/child cwd sessions
+--exclude-session ID    Codex: exclude session by id prefix (repeatable)
+--active-grace SECONDS  Codex: skip sessions modified within N seconds (default: 60)
 ```
 
 ## ARA Directory Structure (under `.insight-forge/`)
