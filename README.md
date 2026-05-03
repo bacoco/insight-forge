@@ -23,10 +23,10 @@ Not summaries. Not guesses. Typed knowledge — with evidence, with counter-argu
 ## Install
 
 **Claude Code** — tell Claude:
-> "Clone https://github.com/bacoco/insight-forge into ~/.claude/skills/insight-forge"
+> "Install the insight-forge skill from https://github.com/bacoco/insight-forge"
 
 **Codex CLI** — tell Codex:
-> "Clone https://github.com/bacoco/insight-forge into ~/.codex/skills/insight-forge"
+> "Install the insight-forge skill from https://github.com/bacoco/insight-forge"
 
 That's it. Your agent handles the rest.
 
