@@ -16,7 +16,6 @@ import argparse
 import json
 import os
 import sys
-import re
 from datetime import datetime, timezone
 from pathlib import Path
 from typing import Iterator, Optional
@@ -298,7 +297,7 @@ def main():
               file=sys.stderr)
         suggestions = fuzzy_suggest(args.project, claude_home)
         if suggestions:
-            print(f"[insight-forge] Did you mean one of:", file=sys.stderr)
+            print("[insight-forge] Did you mean one of:", file=sys.stderr)
             for s in suggestions:
                 print(f"  - {s}", file=sys.stderr)
         sys.exit(2)

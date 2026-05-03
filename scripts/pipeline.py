@@ -17,11 +17,10 @@ from __future__ import annotations
 
 import argparse
 import json
-import os
 import re
 import sys
 import unicodedata
-from dataclasses import dataclass, field, asdict
+from dataclasses import dataclass, field
 from datetime import datetime, timezone, timedelta
 from pathlib import Path
 from typing import Optional
@@ -142,7 +141,6 @@ def yaml_load_simple(text: str) -> dict:
     result = {}
     lines = text.split("\n")
     stack = [(0, result)]  # (indent, container)
-    current_list = None
 
     i = 0
     while i < len(lines):
@@ -699,7 +697,6 @@ class CrystallizationDecision:
 
 def detect_verbal_affirmation(observation: dict, candidates: list[CandidateEvent]) -> Optional[str]:
     """Look for first-person user affirmation within ~3 turns of the observation."""
-    obs_content = observation.get("content", "")
     obs_session = observation.get("session_id", "")[:8]
     obs_ts = observation.get("timestamp", "")
 
@@ -720,8 +717,8 @@ def detect_verbal_affirmation(observation: dict, candidates: list[CandidateEvent
 def detect_topic_abandonment(observation: dict, all_sessions: list[dict],
                               k: int = 5) -> bool:
     """Topic absent from last k sessions and no open_threads reference."""
-    obs_content = observation.get("content", "")
     obs_session = observation.get("session_id", "")[:8]
+    obs_content = observation.get("content", "")
 
     # Take noun-phrase keywords from observation
     keywords = [w.lower() for w in re.findall(r"\b[A-Za-z]{5,}\b", obs_content)][:5]
