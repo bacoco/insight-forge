@@ -461,6 +461,22 @@ PIVOT_PHRASES = [
     "pivot to", "let me try a different way", "scrap this",
 ]
 
+# Assistant messages that are work-progress narration, not durable knowledge.
+# Matched case-insensitively against the start of the content.
+META_WORK_PREFIXES = re.compile(
+    r"^(i'?m |i am )(checking|reviewing|looking|reading|scanning|analyzing|verifying|"
+    r"running|fixing|updating|writing|creating|finding|searching|examining|inspecting)\b"
+    r"|^(i'?ve |i have )(reviewed|checked|looked|found|read|scanned|run|updated|written|"
+    r"created|analyzed|verified|confirmed|identified|examined|inspected)\b"
+    r"|^(let me |let's )(check|look|read|review|scan|run|verify|create|write|update|fix|"
+    r"examine|inspect|analyze|search|find)\b"
+    r"|^(checking|reading|looking|scanning|reviewing|analyzing|verifying|running|examining)\b"
+    r"|^(the |this )(repo|repository|branch|file|directory|codebase|code) (is |has |contains |shows )"
+    r"|^repo is (on|at|tracking)\b"
+    r"|^(branch|tracking|local changes|working directory)\b",
+    re.IGNORECASE,
+)
+
 
 def normalize_text(s: str) -> str:
     """Lowercase, strip accents, collapse whitespace."""
@@ -634,6 +650,9 @@ def classify_and_route(ev: CandidateEvent) -> Optional[RoutedEvent]:
     # === Stage potentially interpretive content ===
     # Falsifiable claim from assistant
     if ev.role == "assistant":
+        # Skip progress-narration messages — they are activity traces, not durable knowledge.
+        if META_WORK_PREFIXES.match(content.strip()):
+            return None
         # "X is faster than Y" / "Z always fails"
         if re.search(r"\b(is|are|works|fails|always|never)\b.*\b(than|on|when|because)\b",
                       content, re.IGNORECASE) and len(content) < 400:
