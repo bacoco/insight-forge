@@ -18,6 +18,18 @@ Not summaries. Not guesses. Typed knowledge — with evidence, with counter-argu
 
 ---
 
+## Install
+
+**Claude Code** — tell Claude:
+> "Clone https://github.com/bacoco/insight-forge into ~/.claude/skills/insight-forge"
+
+**Codex CLI** — tell Codex:
+> "Clone https://github.com/bacoco/insight-forge into ~/.codex/skills/insight-forge"
+
+That's it. Your agent handles the rest.
+
+---
+
 ## The problem with AI memory
 
 Every session ends, and the learning stays locked in the transcript.
@@ -116,20 +128,6 @@ Proposals are organized by epistemic confidence:
 | **Codex CLI** | `~/.codex/sessions/YYYY/MM/DD/rollout-*.jsonl` |
 
 One installation. Both agents. No configuration.
-
----
-
-## Install in 10 seconds
-
-```bash
-# Claude Code
-cp -r insight-forge ~/.claude/skills/
-
-# Codex CLI
-cp -r insight-forge ~/.codex/skills/
-```
-
-Project-level install also supported — drop into `.claude/skills/` or `.codex/skills/` next to your repo.
 
 ---
 
