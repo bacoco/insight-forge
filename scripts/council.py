@@ -72,7 +72,6 @@ def collect_session_excerpts(forge_dir: Path, session_ids: list[str],
 
     excerpts = []
     in_target_session = False
-    current_session = ""
     line_count = 0
 
     with cache.open(encoding="utf-8") as f:
@@ -85,7 +84,6 @@ def collect_session_excerpts(forge_dir: Path, session_ids: list[str],
             if marker == "session_start":
                 sid = obj.get("session_short", "")[:8]
                 in_target_session = sid in session_ids
-                current_session = sid
                 if in_target_session:
                     excerpts.append(f"\n--- session {sid} ---")
                 continue
@@ -224,13 +222,13 @@ def frame_target(entry: dict, source_file: str, excerpts: str) -> str:
     
     body_parts = [
         f"# Target for council attack: {eid}",
-        f"",
-        f"## The crystallized entry",
-        f"",
+        "",
+        "## The crystallized entry",
+        "",
         f"**ID**: {eid}",
         f"**Source**: `{source_file}`",
         f"**Title**: {title}",
-        f"",
+        "",
     ]
     
     important_fields = [
@@ -253,7 +251,7 @@ def frame_target(entry: dict, source_file: str, excerpts: str) -> str:
         "",
         "## What's at stake",
         "",
-        f"This entry sits in the project's knowledge base. If it's wrong, downstream decisions inherit the error. If it gets copied into CLAUDE.md / AGENTS.md, the agent will operate on it as if true across all future sessions. The cost of being wrong is high.",
+        "This entry sits in the project's knowledge base. If it's wrong, downstream decisions inherit the error. If it gets copied into CLAUDE.md / AGENTS.md, the agent will operate on it as if true across all future sessions. The cost of being wrong is high.",
         "",
         "## Session excerpts that fed this entry",
         "",
@@ -463,8 +461,8 @@ def main():
 
     print(f"[insight-forge] Council prepared for {entry_id} at:", file=sys.stderr)
     print(f"  {out_dir}", file=sys.stderr)
-    print(f"[insight-forge] Next: agent should read README.md and orchestrate "
-          f"5 parallel sub-agents.", file=sys.stderr)
+    print("[insight-forge] Next: agent should read README.md and orchestrate "
+          "5 parallel sub-agents.", file=sys.stderr)
     print(str(out_dir))
 
 

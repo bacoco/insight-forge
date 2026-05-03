@@ -57,11 +57,11 @@ def render_session(session_meta: dict, events: list[dict]) -> str:
     agent = session_meta.get("agent", "?")
     date = session_meta.get("mtime", "")[:10]
     size_kb = session_meta.get("size_kb", "?")
-    out.append(f'<div class="session">')
-    out.append(f'<div class="session-header">')
+    out.append('<div class="session">')
+    out.append('<div class="session-header">')
     out.append(f'  <strong>Session {escape(sid)}</strong> &nbsp;|&nbsp; ')
     out.append(f'agent: {escape(agent)} &nbsp;|&nbsp; date: {escape(date)} &nbsp;|&nbsp; size: {size_kb} KB &nbsp;|&nbsp; events: {len(events)}')
-    out.append(f'</div>')
+    out.append('</div>')
     last_date = ""
     for ev in events:
         ts = ev.get("timestamp", "")
