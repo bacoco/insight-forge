@@ -49,26 +49,37 @@ def normalize_path(p: str) -> str:
     return p
 
 
-def session_cwd_matches(jsonl_path: Path, target_cwd: str, max_lines: int = 30) -> bool:
-    """Read the first ~30 lines of a rollout to find the cwd."""
+def session_cwd_matches(jsonl_path: Path, target_cwd: str, max_lines: int = 30,
+                        fuzzy: bool = False) -> bool:
+    """Read the first ~30 lines of a rollout to find the cwd.
+
+    By default (fuzzy=False) only an exact cwd match is accepted.
+    Pass fuzzy=True to also accept parent/child directory matches (pre-v1 behaviour).
+    """
     target = normalize_path(target_cwd)
     if not target:
         return False
+
+    def _matches(found: str) -> bool:
+        if fuzzy:
+            return found == target or found.startswith(target + "/") or target.startswith(found + "/")
+        return found == target
 
     try:
         with jsonl_path.open(encoding="utf-8", errors="replace") as f:
             for i, line in enumerate(f):
                 if i >= max_lines:
                     break
-                # Try regex patterns
+                # Try structured regex patterns first
                 for pattern in CWD_PATTERNS:
                     m = pattern.search(line)
                     if m:
                         found = normalize_path(m.group(1))
-                        if found == target or found.startswith(target + "/") or target.startswith(found + "/"):
+                        if _matches(found):
                             return True
-                # Cheap substring fallback (works when cwd appears in any form)
-                if target in line or target.replace("/", "\\") in line:
+                # Quoted-value fallback: only match when the path appears as a quoted string
+                # to avoid false positives from parent paths appearing as substrings.
+                if f'"{target}"' in line or f"'{target}'" in line:
                     return True
     except Exception:
         return False
@@ -275,14 +286,17 @@ def iter_session(jsonl_path: Path) -> Iterator[dict]:
             obj = parse_line(first)
             if obj:
                 if obj.get("type") in ("session_meta", "session_header"):
-                    sid = obj.get("session_id", "")
+                    # session_id lives in payload.id in current Codex schema;
+                    # fall back to top-level session_id for older formats.
+                    payload = obj.get("payload", {})
+                    if not isinstance(payload, dict):
+                        payload = {}
+                    sid = payload.get("id", "") or obj.get("session_id", "")
                     session_meta["session_id"] = sid
                     session_meta["session_short"] = sid[:8] if sid else ""
-                    session_meta["timestamp"] = obj.get("timestamp", "")
-                    # Try to extract cwd from a payload field if present
-                    payload = obj.get("payload", {})
-                    if isinstance(payload, dict):
-                        session_meta["cwd"] = payload.get("cwd", "")
+                    session_meta["timestamp"] = (obj.get("timestamp", "")
+                                                 or payload.get("created_at", ""))
+                    session_meta["cwd"] = payload.get("cwd", "")
                 else:
                     # Not a SessionMeta — process as regular line
                     ev = normalize_codex_line(obj, session_meta)
@@ -339,7 +353,8 @@ def session_metadata(jsonl_path: Path) -> dict:
 
 
 def find_codex_sessions(target_cwd: str, codex_home: Path,
-                        include_archived: bool = False) -> list[Path]:
+                        include_archived: bool = False,
+                        fuzzy_cwd: bool = False) -> list[Path]:
     """Locate rollout-*.jsonl files matching the target cwd."""
     roots = [codex_home / "sessions"]
     if include_archived:
@@ -350,7 +365,7 @@ def find_codex_sessions(target_cwd: str, codex_home: Path,
         if not root.exists():
             continue
         for jsonl in root.rglob("rollout-*.jsonl"):
-            if session_cwd_matches(jsonl, target_cwd):
+            if session_cwd_matches(jsonl, target_cwd, fuzzy=fuzzy_cwd):
                 matches.append(jsonl)
 
     return sorted(matches, key=lambda p: p.stat().st_mtime)
@@ -370,6 +385,8 @@ def main():
                    help="Output file path (default: stdout).")
     p.add_argument("--include-archived", action="store_true",
                    help="Also scan ~/.codex/archived_sessions/.")
+    p.add_argument("--fuzzy-cwd", action="store_true",
+                   help="Also include sessions from parent/child cwd directories (default: exact match only).")
     p.add_argument("--codex-home", type=str, default=None,
                    help="Override ~/.codex location.")
     p.add_argument("--list-only", action="store_true",
@@ -383,7 +400,8 @@ def main():
             codex_home = Path(codex_home_env)
 
     files = find_codex_sessions(args.project, codex_home,
-                                 include_archived=args.include_archived)
+                                include_archived=args.include_archived,
+                                fuzzy_cwd=args.fuzzy_cwd)
 
     if not files:
         print(f"[insight-forge] No Codex sessions found for cwd: {args.project}",
