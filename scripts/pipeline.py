@@ -276,6 +276,7 @@ class ForgeState:
             "logic/heuristics.md": "# Heuristics\n",
             "logic/dead_ends.md": "# Dead Ends\n",
             "logic/concepts.md": "# Concepts\n",
+            "logic/constraints.md": "# Constraints\n",
             "evidence/README.md": "# Evidence\n\nRendered session transcripts (iMessage-style HTML) live here.\n",
             "proposals/README.md": "# Proposals\n\nPending updates to `CLAUDE.md` / `AGENTS.md` for user review.\n",
         }
@@ -906,6 +907,34 @@ def write_heuristic(state: ForgeState, hid: str, fields: dict):
     state.append_md("logic/heuristics.md", md.strip())
 
 
+def write_concept(state: ForgeState, kid: str, fields: dict):
+    md = f"""
+## {kid}: {fields.get('title', 'untitled')}
+- **Definition**: {fields.get('definition', '?')}
+- **Status**: {fields.get('status', 'active')}
+- **Provenance**: {fields.get('provenance', 'unknown')}
+- **Crystallized via**: {fields.get('crystallized_via', '?')}
+- **Counter-evidence**: {fields.get('counter_evidence', 'not_explored')}
+- **From staging**: {fields.get('from_staging', '?')}
+- **Sessions**: [{', '.join(fields.get('sessions', []))}]
+"""
+    state.append_md("logic/concepts.md", md.strip())
+
+
+def write_constraint(state: ForgeState, rid: str, fields: dict):
+    md = f"""
+## {rid}: {fields.get('title', 'untitled')}
+- **Rule**: {fields.get('rule', '?')}
+- **Scope**: {fields.get('scope', 'project-wide')}
+- **Provenance**: {fields.get('provenance', 'unknown')}
+- **Crystallized via**: {fields.get('crystallized_via', '?')}
+- **Counter-evidence**: {fields.get('counter_evidence', 'not_explored')}
+- **From staging**: {fields.get('from_staging', '?')}
+- **Sessions**: [{', '.join(fields.get('sessions', []))}]
+"""
+    state.append_md("logic/constraints.md", md.strip())
+
+
 def append_tree_node(state: ForgeState, node: dict):
     tree_data = state.read_yaml("trace/exploration_tree.yaml")
     if "tree" not in tree_data:
@@ -1078,6 +1107,24 @@ def run_pipeline(input_path: Path, forge_dir: Path,
                 "counter_cases": decision.counter_evidence,
             })
             write_heuristic(state, new_id, common_fields)
+        elif target == "concept":
+            common_fields.update({
+                "definition": obs.get("content", "")[:300],
+                "status": "active",
+            })
+            write_concept(state, new_id, common_fields)
+        elif target == "constraint":
+            common_fields.update({
+                "rule": obs.get("content", "")[:300],
+                "scope": "project-wide",
+            })
+            write_constraint(state, new_id, common_fields)
+        else:
+            # Unknown target — do NOT mark as promoted; leave in staging.
+            print(f"[insight-forge] Warning: no writer for target '{target}' "
+                  f"(obs {obs.get('id', '?')}) — left in staging", file=sys.stderr)
+            crystallized_count -= 1
+            continue
 
         # Mark observation as promoted
         update_observation(state, obs.get("id", ""), {
