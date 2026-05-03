@@ -1,4 +1,4 @@
-# insight-forge
+# Insight Forge
 
 ![Insight Forge](assets/banner.jpg)
 
