@@ -352,21 +352,60 @@ def session_metadata(jsonl_path: Path) -> dict:
     }
 
 
+def _session_id_from_file(jsonl_path: Path) -> str:
+    """Read the session id from the first line of a rollout file (fast path)."""
+    try:
+        with jsonl_path.open(encoding="utf-8", errors="replace") as f:
+            first = f.readline().strip()
+        obj = parse_line(first)
+        if obj and obj.get("type") in ("session_meta", "session_header"):
+            payload = obj.get("payload", {})
+            if isinstance(payload, dict):
+                sid = payload.get("id", "") or obj.get("session_id", "")
+                return sid[:8] if sid else ""
+    except Exception:
+        pass
+    return ""
+
+
 def find_codex_sessions(target_cwd: str, codex_home: Path,
                         include_archived: bool = False,
-                        fuzzy_cwd: bool = False) -> list[Path]:
-    """Locate rollout-*.jsonl files matching the target cwd."""
+                        fuzzy_cwd: bool = False,
+                        exclude_sessions: list[str] | None = None,
+                        active_grace_seconds: int = 60) -> list[Path]:
+    """Locate rollout-*.jsonl files matching the target cwd.
+
+    Anti-self-ingestion guards (applied before returning):
+    - Any session whose short id (first 8 chars) appears in exclude_sessions is dropped.
+    - Any session file modified within active_grace_seconds of now is dropped as
+      potentially still being written (i.e. the current live session).
+      Set active_grace_seconds=0 to disable this heuristic.
+    """
     roots = [codex_home / "sessions"]
     if include_archived:
         roots.append(codex_home / "archived_sessions")
+
+    exclude_set = {s[:8] for s in (exclude_sessions or [])}
+    now = datetime.now(tz=timezone.utc).timestamp()
 
     matches = []
     for root in roots:
         if not root.exists():
             continue
         for jsonl in root.rglob("rollout-*.jsonl"):
-            if session_cwd_matches(jsonl, target_cwd, fuzzy=fuzzy_cwd):
-                matches.append(jsonl)
+            if not session_cwd_matches(jsonl, target_cwd, fuzzy=fuzzy_cwd):
+                continue
+            # Heuristic: skip files still being actively written
+            if active_grace_seconds > 0:
+                age_secs = now - jsonl.stat().st_mtime
+                if age_secs < active_grace_seconds:
+                    continue
+            # Explicit session exclusion
+            if exclude_set:
+                sid = _session_id_from_file(jsonl)
+                if sid and sid in exclude_set:
+                    continue
+            matches.append(jsonl)
 
     return sorted(matches, key=lambda p: p.stat().st_mtime)
 
@@ -387,6 +426,12 @@ def main():
                    help="Also scan ~/.codex/archived_sessions/.")
     p.add_argument("--fuzzy-cwd", action="store_true",
                    help="Also include sessions from parent/child cwd directories (default: exact match only).")
+    p.add_argument("--exclude-session", action="append", dest="exclude_sessions",
+                   metavar="SESSION_ID", default=[],
+                   help="Exclude a session by id prefix (repeatable). Use to prevent self-ingestion.")
+    p.add_argument("--active-grace", type=int, default=60, metavar="SECONDS",
+                   help="Skip sessions modified within this many seconds (default: 60). "
+                        "Prevents ingesting the currently running session. Set 0 to disable.")
     p.add_argument("--codex-home", type=str, default=None,
                    help="Override ~/.codex location.")
     p.add_argument("--list-only", action="store_true",
@@ -401,7 +446,15 @@ def main():
 
     files = find_codex_sessions(args.project, codex_home,
                                 include_archived=args.include_archived,
-                                fuzzy_cwd=args.fuzzy_cwd)
+                                fuzzy_cwd=args.fuzzy_cwd,
+                                exclude_sessions=args.exclude_sessions,
+                                active_grace_seconds=args.active_grace)
+
+    if args.exclude_sessions:
+        print(f"[insight-forge] Excluding sessions: {args.exclude_sessions}", file=sys.stderr)
+    if args.active_grace > 0:
+        print(f"[insight-forge] Skipping sessions modified within last {args.active_grace}s "
+              f"(anti-self-ingestion guard, disable with --active-grace 0)", file=sys.stderr)
 
     if not files:
         print(f"[insight-forge] No Codex sessions found for cwd: {args.project}",
