@@ -1,0 +1,171 @@
+# Devil's Advocate (mandatory clauses)
+
+This is the contribution that distinguishes insight-forge from a naive log scraper. Every crystallization must justify itself against an explicit counter-position. If it can't, that's surfaced as a warning — not a blocker, but a flag the user sees.
+
+## The core principle
+
+A claim/heuristic/dead_end that you can't argue against is probably overconfident. Forcing yourself to write the counter-case at promotion time achieves three things:
+
+1. **Catches premature crystallizations.** If you struggle to articulate counter-evidence, the claim is probably narrower than you thought.
+2. **Documents the conditions under which the claim holds.** A claim with a clear counter-case is more useful than a vague universal.
+3. **Pre-empts future contradictions.** When a contradiction does arise later, the original counter-case provides scaffolding for the resolution.
+
+This is integrated into the pipeline as a **mandatory field at crystallization**, not a separate review step.
+
+## Mandatory fields per entry type
+
+### Claims (`logic/claims.md`)
+
+```markdown
+- **Counter-evidence**: {what observation/test would refute this} | not_explored
+```
+
+Examples:
+- Claim: "pytest is faster than unittest on this codebase"
+- Counter-evidence: "would be refuted by a benchmark showing equal or slower runtimes on the full test suite, especially with parametrize-heavy tests where unittest's discovery is simpler"
+
+- Claim: "the auth resolver caches correctly"
+- Counter-evidence: not_explored ← this should trigger a warning
+
+### Heuristics (`logic/heuristics.md`)
+
+```markdown
+- **Counter-cases**: {when does this NOT apply} | not_explored
+```
+
+Examples:
+- Heuristic: "always mock S3 with moto, never localstack"
+- Counter-cases: "doesn't apply when testing IAM-policy-driven access patterns — moto's IAM is incomplete; localstack handles those better"
+
+### Dead ends (`logic/dead_ends.md`)
+
+```markdown
+- **Could have worked if**: {Devil's Advocate clause — what missing piece could have rescued this}
+```
+
+Examples:
+- Dead end: "tried to migrate the auth model in a single PR — got reverted"
+- Could have worked if: "if we had landed the read-side migration first as a separate PR with feature flag, then flipped the flag, then removed the old code in PR3"
+
+This is more useful than just "complex migrations need staging" because it preserves the specific tactical insight.
+
+### Concepts and constraints
+
+For these, Devil's Advocate is optional but encouraged:
+- **Boundary conditions**: when does this concept stop being useful?
+- **Failure modes of the constraint**: when does enforcing it cause more harm than it prevents?
+
+## How the pipeline generates these
+
+The Maturity Tracker, when promoting an observation `O{XX}`, must:
+
+1. Read the observation's `content` and `context`
+2. Read the `bound_to` exploration nodes for context
+3. Generate the appropriate counter-X field by:
+   - Searching the same session(s) for any user pushback on the claim
+   - Searching previous staged observations for partial contradictions
+   - If nothing obvious: write `not_explored` and flag in the run summary
+
+The pipeline log records how the counter-X was generated:
+
+```yaml
+runs:
+  - run_id: "..."
+    notes:
+      - "Crystallized C07 'pytest faster' — counter-evidence sourced from O09 (parametrize concern)"
+      - "Crystallized H03 'mock with moto' — counter-cases marked not_explored, surfaced in summary"
+```
+
+## The `--challenge` mode
+
+`/insight-forge --challenge` runs a Devil's Advocate sweep over already-crystallized claims that are `status: supported` and were crystallized in earlier runs.
+
+For each such claim:
+
+1. Search NEW sessions (newer than `last_challenge` cursor in `.last_run`) for any evidence relating to the claim's topic
+2. Use the claim's `counter_evidence` field as a search guide — look for patterns matching the counter-case
+3. If matching evidence found:
+   - Treat as contradiction (per `contradiction-protocol.md`)
+   - Do NOT auto-flip the claim — generate a contradiction memo for user review
+
+`--challenge` does not modify any existing claims. It only flags. The user decides.
+
+## When NOT to fight
+
+The Devil's Advocate clause is required, but it's not adversarial for adversariality's sake. Some legit cases:
+
+- **`not_explored` is a valid value.** Don't invent a counter-case. Write `not_explored` and let the user decide if the claim is too speculative.
+- **Tautologies don't need counter-cases.** "The project uses Python" — there's no useful counter-case.
+- **Some heuristics are universal in scope.** "Don't commit secrets to git" — counter-cases like "unless you want them stolen" are useless. Write `none-applicable` for these (different from `not_explored`).
+
+## Failure modes
+
+- **Generating fake counter-cases** to pass the check. Worse than `not_explored`. The pipeline log should record when the counter-case was generated by pattern-matching on the content (low confidence) vs. sourced from actual transcript evidence (high confidence).
+- **Counter-cases that aren't actually counters**, just edge cases or restatements. Lint check at promotion: counter-evidence text must contain at least one negation or contrast marker (`unless`, `except`, `would refute`, `breaks down when`, etc.) OR be tagged `not_explored`/`none-applicable`.
+
+## Hedging detection (lint on our own outputs)
+
+Counter-evidence clauses generated by the pipeline are themselves vulnerable to hedging — generic phrases that stay true regardless of the claim. They look like rigor, they're noise. Reject these patterns when generating or reviewing a counter clause:
+
+| Anti-pattern | Why it fails | Rewrite |
+|---|---|---|
+| "Would be refuted by an observation showing the opposite of: X" | Tautology — true for any X | Specify the actual mechanism: "would be refuted if benchmark Y on file Z shows..." |
+| "Doesn't apply when the underlying assumptions break down" | Vague — every heuristic has assumptions | Name the assumption: "assumes a single-process tester; breaks under pytest-xdist" |
+| "Could have worked if the missing precondition had been met" | Circular — defines failure as missing what was missing | Name the precondition: "would have worked if the read-side migration had landed first" |
+| "There could be edge cases" / "in some scenarios" / "under certain conditions" | Hedge phrases that survive any topic | Cut. Replace with a concrete scenario or `not_explored`. |
+| "X might not always be true" | True for everything | Cut. Either name when X breaks, or `not_explored`. |
+
+**Self-check at promotion**: before writing a counter_evidence value, normalize the candidate text and grep for hedge markers. If hit, regenerate or downgrade to `not_explored`. The pipeline log should record `hedge_lint: rejected` events.
+
+This is non-negotiable: a hedged counter-evidence is worse than no counter-evidence, because it gives false confidence that the Devil's Advocate clause was satisfied.
+
+## Systematic risk axes (the 6-axis sweep)
+
+The `--challenge` mode and the council `--council <id>` mode both benefit from a checklist of risk categories that often go unprobed. Borrowed from the connu-inconnu method but adapted for crystallized engineering knowledge:
+
+| Axis | What's typically missing in a claim/heuristic |
+|---|---|
+| Accessibility | Claims about UI/CLI never tested with screen readers, claims about "users" that exclude assistive-tech users |
+| Performance | Claims based on N=1 small sample, no statement of scaling behavior, no mention of percentile (median ≠ p99) |
+| Security | Heuristics about "best practice X" without threat model, claims that work in dev but assume infra trust |
+| Maintenance | Heuristics that require expert intuition without onboarding path, dead_ends that depend on a specific person's judgment |
+| Legal/compliance | Claims about data handling without GDPR/SOC2 framing, sector-specific regulations |
+| Organizational | Claims about "the team" / "we" that hide team-size or expertise assumptions |
+
+When generating counter_evidence for any cristallized entry, the pipeline should attempt a 1-axis projection per axis: "what would this claim look like if I checked it against [axis]?". If no axis surfaces a counter-case, that's data — log it. If one does, use it as the counter_evidence seed.
+
+This is cheap (no LLM needed for the axis enumeration itself) and prevents the most common failure: counter-evidence stays in the same conceptual neighborhood as the claim, never crosses domains.
+
+## Access clause (epistemic honesty)
+
+When generating counter_evidence, if the candidate counter-case would require information the pipeline doesn't have access to — cwd not in sessions, files outside the project, organizational context, runtime metrics — say so explicitly:
+
+```
+counter_evidence: "Would require benchmark data from production traffic, not present in scanned sessions"
+```
+
+This is *better* than `not_explored` because it tells the user where to look. `not_explored` means "I didn't try"; the access clause means "I tried, here's what I'd need". Use it whenever the natural counter-case lives outside what insight-forge has read.
+
+The pipeline log should categorize these as `counter_evidence_status: bounded_by_access`.
+
+## The `--challenge` mode (non-tautological version)
+
+Naive `--challenge` searches new sessions for evidence refuting old claims, but uses the same signal type that promoted them — circular.
+
+The non-tautological version applies the **6-axis sweep** as the search frame:
+
+1. For each `status: supported` claim crystallized > 14 days ago
+2. Run the 6-axis projection (above) — generate one search question per axis
+3. For each search question, look in NEW session content (not staged, not crystallized — raw transcript)
+4. If a match surfaces → flag as contradiction (per `contradiction-protocol.md`), do not auto-flip
+5. Log axis coverage: which axes surfaced something, which didn't
+
+This is qualitatively different from "find sessions that contradict claim". It's "look at claim through 6 different lenses and check whether the actual transcripts have anything to say from each lens".
+
+For the `--council` mode (5-attacker version), see `council-protocol.md`.
+
+## Why this matters specifically for cross-session learning
+
+Long-running CLAUDE.md / AGENTS.md files become graveyards of overconfident claims. Every claim gets stated, none gets challenged, contradictions accumulate silently. Devil's Advocate at promotion time is the cheapest intervention against this rot.
+
+This is also why `--challenge` exists — periodic sweeps to surface stale claims that newer evidence contradicts. Without this, the knowledge base ages badly.

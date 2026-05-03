@@ -1,0 +1,175 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<title>Insight Forge — Session Evidence</title>
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<style>
+  :root {
+    --bg: #f5f5f7;
+    --panel: #ffffff;
+    --border: #e1e1e6;
+    --text: #1d1d1f;
+    --muted: #6e6e73;
+    --user-bg: #007aff;
+    --user-text: #ffffff;
+    --assistant-bg: #e9e9eb;
+    --assistant-text: #1d1d1f;
+    --tool-bg: #f2f2f7;
+    --tool-border: #d2d2d7;
+    --error-tint: #ffebee;
+    --error-border: #ef9a9a;
+    --separator: #c7c7cc;
+  }
+  @media (prefers-color-scheme: dark) {
+    :root {
+      --bg: #000000;
+      --panel: #1c1c1e;
+      --border: #38383a;
+      --text: #f5f5f7;
+      --muted: #8e8e93;
+      --assistant-bg: #2c2c2e;
+      --assistant-text: #f5f5f7;
+      --tool-bg: #1c1c1e;
+      --tool-border: #38383a;
+      --error-tint: #2c1010;
+      --error-border: #6e2020;
+      --separator: #38383a;
+    }
+  }
+  * { box-sizing: border-box; }
+  html, body {
+    margin: 0;
+    padding: 0;
+    background: var(--bg);
+    color: var(--text);
+    font-family: -apple-system, BlinkMacSystemFont, "SF Pro Text", "Helvetica Neue", Arial, sans-serif;
+    font-size: 16px;
+    line-height: 1.45;
+  }
+  .container {
+    max-width: 800px;
+    margin: 0 auto;
+    padding: 24px 16px 80px;
+  }
+  header.top {
+    border-bottom: 1px solid var(--border);
+    padding-bottom: 16px;
+    margin-bottom: 24px;
+  }
+  header.top h1 {
+    margin: 0 0 4px 0;
+    font-size: 22px;
+    font-weight: 600;
+  }
+  header.top .meta {
+    color: var(--muted);
+    font-size: 13px;
+  }
+  .session {
+    margin-bottom: 40px;
+  }
+  .session-header {
+    background: var(--panel);
+    border: 1px solid var(--border);
+    border-radius: 12px;
+    padding: 12px 16px;
+    margin-bottom: 16px;
+    font-size: 13px;
+    color: var(--muted);
+  }
+  .session-header strong {
+    color: var(--text);
+  }
+  .day-divider {
+    text-align: center;
+    color: var(--muted);
+    font-size: 12px;
+    margin: 24px 0 16px;
+    position: relative;
+  }
+  .day-divider::before, .day-divider::after {
+    content: "";
+    position: absolute;
+    top: 50%;
+    width: calc(50% - 60px);
+    height: 1px;
+    background: var(--separator);
+  }
+  .day-divider::before { left: 0; }
+  .day-divider::after  { right: 0; }
+  .msg {
+    display: flex;
+    margin: 8px 0;
+    max-width: 100%;
+  }
+  .msg.user {
+    justify-content: flex-end;
+  }
+  .msg.assistant, .msg.tool_use, .msg.tool_result {
+    justify-content: flex-start;
+  }
+  .bubble {
+    max-width: 85%;
+    padding: 10px 14px;
+    border-radius: 18px;
+    word-wrap: break-word;
+    overflow-wrap: break-word;
+    white-space: pre-wrap;
+    font-size: 15px;
+  }
+  .msg.user .bubble {
+    background: var(--user-bg);
+    color: var(--user-text);
+    border-bottom-right-radius: 4px;
+  }
+  .msg.assistant .bubble {
+    background: var(--assistant-bg);
+    color: var(--assistant-text);
+    border-bottom-left-radius: 4px;
+  }
+  .msg.tool_use .bubble, .msg.tool_result .bubble {
+    background: var(--tool-bg);
+    color: var(--text);
+    border: 1px solid var(--tool-border);
+    border-radius: 10px;
+    font-family: "SF Mono", Menlo, monospace;
+    font-size: 13px;
+  }
+  .msg.tool_result.error .bubble {
+    background: var(--error-tint);
+    border-color: var(--error-border);
+  }
+  .meta-row {
+    font-size: 11px;
+    color: var(--muted);
+    margin: 0 8px;
+    align-self: flex-end;
+  }
+  .citation {
+    background: rgba(255, 204, 0, 0.25);
+    padding: 1px 4px;
+    border-radius: 3px;
+  }
+  .marker {
+    text-align: center;
+    color: var(--muted);
+    font-size: 11px;
+    font-style: italic;
+    margin: 8px 0;
+  }
+</style>
+</head>
+<body>
+<div class="container">
+
+<header class="top">
+  <h1>{{TITLE}}</h1>
+  <div class="meta">{{SUBTITLE}}</div>
+</header>
+
+{{BODY}}
+
+</div>
+</body>
+</html>
