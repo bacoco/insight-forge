@@ -27,10 +27,13 @@ from typing import Optional
 
 
 # ============================================================
-# YAML lite (so we don't depend on PyYAML)
+# YAML — use PyYAML when available, fallback to built-in lite parser
 # ============================================================
-# We write YAML manually with a small set of conventions; we read it via a
-# minimalist parser that handles only the structures we generate.
+try:
+    import yaml as _yaml
+    _HAS_PYYAML = True
+except ImportError:
+    _HAS_PYYAML = False
 
 def yaml_dump_simple(data: dict, indent: int = 0) -> str:
     """Dump a dict to YAML. Handles only nested dicts, lists, strings, ints, bools, None."""
@@ -290,10 +293,23 @@ class ForgeState:
         p = self.dir / rel
         if not p.exists():
             return {}
-        return yaml_load_simple(p.read_text(encoding="utf-8"))
+        text = p.read_text(encoding="utf-8")
+        if _HAS_PYYAML:
+            try:
+                result = _yaml.safe_load(text)
+                return result if isinstance(result, dict) else {}
+            except Exception:
+                pass
+        return yaml_load_simple(text)
 
     def write_yaml(self, rel: str, data: dict):
         p = self.dir / rel
+        if _HAS_PYYAML:
+            try:
+                p.write_text(_yaml.safe_dump(data, allow_unicode=True, default_flow_style=False), encoding="utf-8")
+                return
+            except Exception:
+                pass
         p.write_text(yaml_dump_simple(data) + "\n", encoding="utf-8")
 
     def append_md(self, rel: str, content: str):
@@ -665,18 +681,27 @@ def classify_and_route(ev: CandidateEvent) -> Optional[RoutedEvent]:
                 extra={},
             )
 
-    # Constraint
+    # Constraint — but skip raw task instructions (long imperative messages)
     if re.search(r"\b(must|requires|requires? at least|doit|nécessite|requires)\s+\S+",
                  content, re.IGNORECASE) and ev.role == "user":
-        return RoutedEvent(
-            candidate=ev,
-            route="staged",
-            type_="constraint",
-            provenance="user",
-            confidence="medium",
-            distilled=content[:300],
-            extra={},
+        # Filter out raw user instructions: long messages with task-imperative openers
+        _TASK_IMPERATIVE = re.compile(
+            r"^(fix|create|add|update|remove|delete|refactor|implement|write|make|build|"
+            r"run|check|look|go|show|tell|crée|ajoute|supprime|mets|fais|regarde|va|"
+            r"corrige|génère|modifie|lance|installe)\b",
+            re.IGNORECASE,
         )
+        is_raw_instruction = len(content) > 400 or bool(_TASK_IMPERATIVE.match(content.strip()))
+        if not is_raw_instruction:
+            return RoutedEvent(
+                candidate=ev,
+                route="staged",
+                type_="constraint",
+                provenance="user",
+                confidence="medium",
+                distilled=content[:300],
+                extra={},
+            )
 
     # No classification — drop
     return None
@@ -958,6 +983,56 @@ def update_observation(state: ForgeState, obs_id: str, updates: dict):
 
 
 # ============================================================
+# Legacy schema migration
+# ============================================================
+
+def migrate_legacy_forge_state(forge_dir: Path):
+    """Convert old dict-style observations/nodes to list-style (one-time migration)."""
+    obs_path = forge_dir / "staging" / "observations.yaml"
+    if obs_path.exists():
+        text = obs_path.read_text(encoding="utf-8")
+        try:
+            data = _yaml.safe_load(text) if _HAS_PYYAML else yaml_load_simple(text)
+        except Exception:
+            data = {}
+        if isinstance(data, dict):
+            obs = data.get("observations")
+            if isinstance(obs, dict):
+                # Old format: {id: {...}, id2: {...}}  → convert to list
+                data["observations"] = [{"id": k, **v} if isinstance(v, dict) else {"id": k, "content": str(v)}
+                                        for k, v in obs.items()]
+                obs_path.write_text(
+                    (_yaml.safe_dump(data, allow_unicode=True, default_flow_style=False)
+                     if _HAS_PYYAML else yaml_dump_simple(data) + "\n"),
+                    encoding="utf-8",
+                )
+
+    tree_path = forge_dir / "trace" / "exploration_tree.yaml"
+    if tree_path.exists():
+        text = tree_path.read_text(encoding="utf-8")
+        try:
+            data = _yaml.safe_load(text) if _HAS_PYYAML else yaml_load_simple(text)
+        except Exception:
+            data = {}
+        if isinstance(data, dict):
+            # Old key was 'nodes'; new key is 'tree'
+            if "nodes" in data and "tree" not in data:
+                nodes = data.pop("nodes")
+                if isinstance(nodes, dict):
+                    data["tree"] = [{"id": k, **v} if isinstance(v, dict) else {"id": k, "title": str(v)}
+                                    for k, v in nodes.items()]
+                elif isinstance(nodes, list):
+                    data["tree"] = nodes
+                else:
+                    data["tree"] = []
+                tree_path.write_text(
+                    (_yaml.safe_dump(data, allow_unicode=True, default_flow_style=False)
+                     if _HAS_PYYAML else yaml_dump_simple(data) + "\n"),
+                    encoding="utf-8",
+                )
+
+
+# ============================================================
 # Main pipeline
 # ============================================================
 
@@ -977,6 +1052,7 @@ def run_pipeline(input_path: Path, forge_dir: Path,
 
     state = ForgeState(forge_dir)
     state.init_if_missing(project_name=forge_dir.parent.name)
+    migrate_legacy_forge_state(forge_dir)
 
     # === Stage 1 ===
     candidates, session_metas = harvest(input_path)
