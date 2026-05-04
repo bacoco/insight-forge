@@ -309,6 +309,8 @@ def main():
     if args.since:
         try:
             since_dt = datetime.fromisoformat(args.since.replace("Z", "+00:00"))
+            if since_dt.tzinfo is None:
+                since_dt = since_dt.replace(tzinfo=timezone.utc)
         except ValueError:
             print(f"[insight-forge] Invalid --since timestamp: {args.since}", file=sys.stderr)
             sys.exit(1)

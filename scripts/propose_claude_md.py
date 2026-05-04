@@ -115,7 +115,7 @@ def build_proposal(forge_dir: Path, target: str, agent_name: str,
         heuristics = filter_recent(heuristics, since, sidx)
         dead_ends = filter_recent(dead_ends, since, sidx)
 
-    today = datetime.now(timezone.utc).date().isoformat()
+    today = datetime.now(timezone.utc).strftime("%Y-%m-%dT%H:%M:%SZ")
     target_label = target if target != "BOTH" else "CLAUDE.md and AGENTS.md"
 
     out = []
@@ -225,7 +225,7 @@ def main():
     proposal = build_proposal(forge_dir, target, agent_name, since)
 
     out_path = Path(args.out) if args.out else (
-        forge_dir / "proposals" / f"{datetime.now(timezone.utc).date().isoformat()}.md"
+        forge_dir / "proposals" / f"{datetime.now(timezone.utc).strftime('%Y-%m-%dT%H-%M-%SZ')}.md"
     )
     out_path.parent.mkdir(parents=True, exist_ok=True)
     out_path.write_text(proposal, encoding="utf-8")
