@@ -8,6 +8,95 @@ If you came from the README and just want the broad shape, jump to
 
 ---
 
+## Les deux papiers, expliqués simplement
+
+Avant de plonger dans le code, voilà l'idée des deux papiers académiques qui
+nous ont guidés. Tu peux sauter cette section si tu connais déjà — sinon ça
+prend 60 secondes et tout le reste du doc devient plus clair.
+
+### L'analogie de la recette de cuisine
+
+Imagine qu'un cuisinier travaille pour toi tous les jours. Il sait faire 50
+plats. Mais ses règles — *"toujours saler après cuisson"*, *"ne jamais mettre
+le poisson au micro-ondes"* — vivent dans sa tête. Si tu veux qu'il change
+une règle, tu dois lui parler. Si un autre cuisinier le remplace, tout est
+perdu. Si une règle se contredit avec une autre, personne ne le voit avant
+que ça brûle.
+
+C'est ça qu'on essaie d'éviter dans insight-forge.
+
+### Papier 1 — *La recette doit être écrite sur un carton, pas dans la tête*
+
+> *Pan et al., Université Tsinghua, 2026.*
+> [arXiv:2603.25723](https://arxiv.org/abs/2603.25723)
+
+Le papier dit trois choses simples :
+
+**1. Mets la recette sur un carton.**
+Pas dans la tête du cuisinier — pas dans le code Python. Sur un carton que
+n'importe qui peut lire, modifier, et passer à un nouveau cuisinier.
+→ *Chez nous : le carton, c'est `harness/rules.yaml`.*
+
+**2. Écris sur la recette à quoi elle doit ressembler quand elle marche.**
+Pas juste *"recette de cookies"* — précise *"cette recette fait exactement
+12 cookies"*. Comme ça, si quelqu'un change la recette, on peut tout de
+suite vérifier qu'elle fait toujours 12 cookies. Si elle en fait 8, le test
+crie.
+→ *Chez nous : chaque règle dit `must_fire_on: [...]` et
+`must_not_fire_on: [...]`. Le test qui crie, c'est `run_evals.py
+--verify-contracts`.*
+
+**3. Garde un ticket de caisse pour chaque ingrédient utilisé.**
+Si quelqu'un demande *"pourquoi de la cannelle dans ce gâteau ?"*, tu dois
+pouvoir sortir le ticket de caisse, la date, et la phrase exacte du jour où
+on a décidé de la mettre.
+→ *Chez nous : chaque règle qui se cristallise produit un fichier
+`evidence/bundles/<id>.yaml` qui contient la citation exacte du moment où
+tu l'as confirmée, datée. Et ces citations remontent dans la proposition
+finale.*
+
+### Papier 2 — *Tu peux avoir un assistant qui propose d'améliorer la recette, à condition qu'il teste avant*
+
+> *Lee et al., Université Stanford, 2026.*
+> [arXiv:2603.28052](https://arxiv.org/abs/2603.28052)
+
+Une fois que la recette est sur un carton (papier 1), tu peux faire un truc
+intelligent : **un assistant qui propose des modifications**.
+
+Mais sans contrôle, l'assistant peut casser ta recette. Donc le papier dit :
+
+**1. L'assistant ne touche jamais à ton carton de recette directement.**
+Il propose une modification sur un *autre* carton qu'il garde pour lui.
+
+**2. Avant de te proposer la modification, l'assistant doit la tester dans
+une cuisine de test.**
+Il fait la nouvelle version de la recette dans une cuisine séparée. Il
+vérifie que :
+- La nouvelle version fait toujours 12 cookies (= les anciens tests passent)
+- La nouvelle version corrige le problème que tu avais signalé (= le
+  fixture *known gap* se ferme)
+- Aucune autre règle ne casse au passage
+
+**3. Si tout va bien, l'assistant te donne juste sa proposition. Tu décides.**
+→ *Chez nous : l'assistant, c'est `scripts/propose_rules.py`. La cuisine
+de test, c'est un `rules.yaml` temporaire dans `/tmp/`. La proposition
+arrive dans `harness/proposals/<date>.yaml`. Tu lis, tu acceptes ou tu
+refuses, tu copies dans le vrai `rules.yaml` à la main.*
+
+### Pourquoi ça compte pour l'utilisateur
+
+Tu n'as jamais à ouvrir `rules.yaml`. Tu n'as jamais à lire ces papiers. Tu
+tapes `/insight-forge`, tu lis ta proposition, tu copies ce que tu veux dans
+ton `CLAUDE.md`. C'est tout.
+
+Ces deux papiers servent juste à garantir que **le moteur derrière la scène
+ne se corrompt pas tout seul au fil du temps**. Tant que les règles vivent
+sur un carton lisible (papier 1) et qu'aucune modification ne passe sans
+tests (papier 2), le projet peut grossir sans devenir un de ces vieux
+codebases où plus personne n'ose toucher quoi que ce soit.
+
+---
+
 ## Étape 0 — Entrée utilisateur
 
 ```
