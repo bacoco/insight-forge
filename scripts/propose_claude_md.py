@@ -18,6 +18,65 @@ import sys
 from datetime import datetime, timezone
 from pathlib import Path
 
+try:
+    import yaml as _yaml
+    _HAS_YAML = True
+except ImportError:
+    _HAS_YAML = False
+
+
+def _load_bundle(forge_dir: Path, entry_id: str) -> dict:
+    """Load the structured evidence bundle for an entry, or {} if missing."""
+    p = forge_dir / "evidence" / "bundles" / f"{entry_id}.yaml"
+    if not p.exists():
+        return {}
+    text = p.read_text(encoding="utf-8")
+    if _HAS_YAML:
+        try:
+            return _yaml.safe_load(text) or {}
+        except Exception:
+            return {}
+    # Fallback to the lite parser
+    try:
+        sys.path.insert(0, str(Path(__file__).resolve().parent))
+        from pipeline import yaml_load_simple  # noqa: E402
+        return yaml_load_simple(text) or {}
+    except Exception:
+        return {}
+
+
+def _format_quote(ev: dict) -> str:
+    """One-line markdown bullet describing an evidence event."""
+    quote = (ev.get("quote") or "").strip()
+    if len(quote) > 220:
+        quote = quote[:217] + "…"
+    quote = quote.replace("\n", " ")
+    ts = (ev.get("timestamp") or "")[:10]  # date only
+    role = ev.get("role") or ""
+    kind = ev.get("kind") or ""
+    label = {
+        "trigger": "*You said*" if role == "user" else "*Claude said*",
+        "verbal-affirmation": "*You confirmed*",
+        "empirical-resolution": "*Tool result*",
+        "topic-abandonment": "*Then untouched in subsequent sessions*",
+    }.get(kind, "*Evidence*")
+    when = f" ({ts})" if ts else ""
+    if kind == "topic-abandonment":
+        return f"  - {label}\n"
+    if not quote:
+        return f"  - {label}{when}\n"
+    return f"  - {label}{when}: \"{quote}\"\n"
+
+
+def _bundle_quotes(forge_dir: Path, entry_id: str) -> str:
+    """Render the trigger + closure quotes for an entry, ready to splice."""
+    bundle = _load_bundle(forge_dir, entry_id)
+    evidence = bundle.get("evidence") or []
+    if not evidence:
+        return ""
+    chunks = [_format_quote(ev) for ev in evidence]
+    return "".join(chunks)
+
 
 def parse_md_entries(text: str, prefix: str) -> list[dict]:
     """Parse entries of the form '## <prefix>NN: ...\\n- **Field**: value\\n...'"""
@@ -134,6 +193,7 @@ def build_proposal(forge_dir: Path, target: str, agent_name: str,
             counter = h.get("Counter-cases", "not_explored")
             sessions = h.get("Sessions", "[]")
             out.append(f"- **{h['id']}**: {rule}\n")
+            out.append(_bundle_quotes(forge_dir, h["id"]))
             if counter and counter != "not_explored":
                 out.append(f"  - *Caveat*: {counter}\n")
             out.append(f"  - *Sessions*: {sessions}\n\n")
@@ -146,6 +206,7 @@ def build_proposal(forge_dir: Path, target: str, agent_name: str,
             counter = c.get("Counter-evidence", "not_explored")
             sessions = c.get("Sessions", "[]")
             out.append(f"- **{c['id']}** *({status})*: {stmt}\n")
+            out.append(_bundle_quotes(forge_dir, c["id"]))
             if counter and counter != "not_explored":
                 out.append(f"  - *Counter-evidence*: {counter}\n")
             out.append(f"  - *Sessions*: {sessions}\n\n")
@@ -158,6 +219,7 @@ def build_proposal(forge_dir: Path, target: str, agent_name: str,
             could = d.get("Could have worked if", "")
             sessions = d.get("Sessions", "[]")
             out.append(f"- **{d['id']}**: avoid {avoid}\n")
+            out.append(_bundle_quotes(forge_dir, d["id"]))
             if lesson:
                 out.append(f"  - *Lesson*: {lesson}\n")
             if could and could != "not_explored":
@@ -229,8 +291,75 @@ def main():
     )
     out_path.parent.mkdir(parents=True, exist_ok=True)
     out_path.write_text(proposal, encoding="utf-8")
-    print(f"[insight-forge] Proposal written to {out_path}", file=sys.stderr)
+
+    # Friendly human-readable summary on stderr — what the user actually wants
+    # to see. The stdout contract (`out_path`) is preserved for run.py.
+    _print_summary(forge_dir, out_path, target, since)
     print(out_path)
+
+
+def _print_summary(forge_dir: Path, out_path: Path, target: str, since) -> None:
+    """Multi-line friendly digest of what was learned."""
+    logic = forge_dir / "logic"
+    h = parse_md_entries((logic / "heuristics.md").read_text(encoding="utf-8"), "H") \
+        if (logic / "heuristics.md").exists() else []
+    c = parse_md_entries((logic / "claims.md").read_text(encoding="utf-8"), "C") \
+        if (logic / "claims.md").exists() else []
+    d = parse_md_entries((logic / "dead_ends.md").read_text(encoding="utf-8"), "D") \
+        if (logic / "dead_ends.md").exists() else []
+
+    if since:
+        sidx = forge_dir / "trace" / "session_index.yaml"
+        h = filter_recent(h, since, sidx)
+        c = filter_recent(c, since, sidx)
+        d = filter_recent(d, since, sidx)
+
+    # Count staged observations not yet promoted (from staging YAML)
+    staged_pending = 0
+    obs_path = forge_dir / "staging" / "observations.yaml"
+    if obs_path.exists():
+        try:
+            text = obs_path.read_text(encoding="utf-8")
+            data = (_yaml.safe_load(text) if _HAS_YAML else None) or {}
+            staged_pending = sum(1 for o in (data.get("observations") or [])
+                                 if not o.get("promoted") and not o.get("stale"))
+        except Exception:
+            pass
+
+    target_label = target if target != "BOTH" else "CLAUDE.md & AGENTS.md"
+
+    sys.stderr.write("\n")
+    sys.stderr.write(f"  Insight Forge — proposal for {target_label}\n")
+    sys.stderr.write("  " + "─" * 56 + "\n")
+    if not (h or c or d):
+        sys.stderr.write("  Nothing new crystallized yet — the pipeline saw your\n")
+        sys.stderr.write("  sessions but no observation has hit a closure signal.\n")
+        sys.stderr.write("  Use the project a bit more, then re-run.\n")
+    else:
+        if h:
+            sys.stderr.write(f"  ✓ {len(h)} project rule{'s' if len(h) != 1 else ''} ready\n")
+            for entry in h[:3]:
+                rule = entry.get("Rule", entry.get("title", ""))[:80]
+                sys.stderr.write(f"      • {rule}\n")
+            if len(h) > 3:
+                sys.stderr.write(f"      … and {len(h) - 3} more\n")
+        if d:
+            sys.stderr.write(f"  ✗ {len(d)} dead end{'s' if len(d) != 1 else ''} to avoid\n")
+            for entry in d[:2]:
+                avoid = entry.get("Avoid signal", entry.get("title", ""))[:80]
+                sys.stderr.write(f"      • {avoid}\n")
+            if len(d) > 2:
+                sys.stderr.write(f"      … and {len(d) - 2} more\n")
+        if c:
+            sys.stderr.write(f"  ? {len(c)} claim{'s' if len(c) != 1 else ''} (project facts)\n")
+
+    if staged_pending:
+        sys.stderr.write(f"  · {staged_pending} observation{'s' if staged_pending != 1 else ''} "
+                         f"still in staging (need more sessions)\n")
+
+    sys.stderr.write("\n")
+    sys.stderr.write(f"  Full proposal — open or paste from:\n")
+    sys.stderr.write(f"    {out_path}\n\n")
 
 
 if __name__ == "__main__":
