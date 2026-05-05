@@ -60,6 +60,7 @@ behavior — by `python3 scripts/run_evals.py --verify-contracts`.
 | `content_length_lt` / `content_length_gt` | Numeric thresholds |
 | `content_starts_with_imperative` | Boolean — does the message start with a task-imperative verb (issue #13)? |
 | `matches_meta_work_prefix` | Boolean — assistant progress-narration filter |
+| `previous_event: { ... }` | Sub-predicate evaluated against the previous event in the same session (uses prev_role / prev_content) |
 
 ### Predicate composition
 
@@ -81,7 +82,19 @@ emit:
   type: claim | heuristic | dead_end | constraint | concept | decision | pivot | experiment | question
   provenance: user | ai-suggested | ai-executed | user-revised | unknown
   confidence: high | medium | low
+  extra:                                  # optional, type-specific fields
+    failure_mode: { from: content, max_chars: 300 }
+    could_have_worked_if: not_explored
+    tool_name: { from: tool_name }
 ```
+
+`emit.extra` lets a rule populate type-specific fields without each
+detector needing its own Python branch in `classify_and_route()`. Each
+value is either:
+
+- a literal (string / int / list / bool) — used as-is
+- a mapping `{from: <attr_name>, max_chars: <int?>}` — read from the
+  candidate event's named attribute, optionally truncated
 
 ### Contract block
 
@@ -110,13 +123,19 @@ wrong.
 
 ## What lives in code (not yet in rules.yaml)
 
-The rule spec covers the three classifier paths whose behavior is regex-
-shaped: `R-HEURISTIC-ALWAYS-NEVER`, `R-CONSTRAINT-MUST-REQUIRES`,
-`R-CLAIM-ASSISTANT`. The remaining detectors (dead_end, pivot, decision,
-tool_use experiment, question) still live in `scripts/pipeline.py` because
-each emits unique extra fields the current schema doesn't model. Migrating
-them is mechanical once the schema grows an `extra:` clause — left for a
-future PR so this one stays small and reviewable.
+The rule spec covers four classifier paths today:
+- `R-DEADEND-TOOL-ERROR` — tool_result with status=error
+- `R-HEURISTIC-ALWAYS-NEVER` — user "always X / never X" patterns
+- `R-CONSTRAINT-MUST-REQUIRES` — user "must / requires / doit / nécessite"
+- `R-CLAIM-ASSISTANT` — assistant comparative claims ("is faster than", etc.)
+
+The remaining detectors (`pivot`, `decision`, `experiment`, `question`,
+`dead_end via DEAD_END_PHRASES`) still live in `scripts/pipeline.py`. Each
+either emits a unique `direct` event with its own extras (decision /
+experiment / question / pivot) or relies on phrase-list matching that
+isn't yet expressible in the predicate vocabulary. Migrating them is
+incremental — `R-DEADEND-TOOL-ERROR` is the template (uses `emit.extra`
+to populate `failure_mode` / `tool_name` / `could_have_worked_if`).
 
 ## The proposer
 

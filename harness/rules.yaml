@@ -89,6 +89,31 @@ imperative_openers:
 
 rules:
   # --------------------------------------------------------------------
+  - id: R-DEADEND-TOOL-ERROR
+    description: A failed tool execution is staged as a candidate dead_end
+    when:
+      role: tool_result
+      tool_status: error
+    emit:
+      route: staged
+      type: dead_end
+      provenance: ai-executed
+      confidence: medium
+      # Each rule that needs type-specific fields populates them here.
+      # `{from: attr}` reads from the candidate event; `max_chars` truncates.
+      extra:
+        failure_mode: { from: content, max_chars: 300 }
+        could_have_worked_if: not_explored
+        tool_name: { from: tool_name }
+    contract:
+      # Both fixtures contain a tool_result with status=error. The rule
+      # MUST fire on both (staging the candidate). Whether that candidate
+      # ultimately promotes is a maturity-tracker concern, not a rule one.
+      must_fire_on:
+        - recovered_tool_error
+        - abandoned_tool_error
+
+  # --------------------------------------------------------------------
   - id: R-HEURISTIC-ALWAYS-NEVER
     description: User states a project rule via always/never/prefer/avoid
     when:

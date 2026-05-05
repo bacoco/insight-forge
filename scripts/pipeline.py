@@ -601,26 +601,10 @@ def classify_and_route(ev: CandidateEvent) -> Optional[RoutedEvent]:
                 },
             )
 
-    # Tool error → potential dead_end if not recovered next.
-    # Use the actual error text as `distilled` so the evidence-bundle trigger
-    # quote is verbatim-traceable to the transcript (the validator's --source
-    # check fails otherwise — there's no "Tool failed: Bash" string in any
-    # session). Falls back to the synthesized title only when content is empty.
-    if ev.role == "tool_result" and ev.tool_status == "error":
-        distilled_text = content[:300] if content.strip() else f"Tool failed: {ev.tool_name or '?'}"
-        return RoutedEvent(
-            candidate=ev,
-            route="staged",
-            type_="dead_end",
-            provenance="ai-executed",
-            confidence="medium",
-            distilled=distilled_text,
-            extra={
-                "failure_mode": content[:300],
-                "could_have_worked_if": "not_explored",
-                "tool_name": ev.tool_name or "",
-            },
-        )
+    # (The tool-error → staged dead_end path used to live here as hardcoded
+    # Python. It is now expressed declaratively as R-DEADEND-TOOL-ERROR in
+    # harness/rules.yaml and dispatched by the rule engine below — same
+    # behavior, but editable without touching code.)
 
     # === Detect pivot ===
     if ev.role == "user":
@@ -640,14 +624,18 @@ def classify_and_route(ev: CandidateEvent) -> Optional[RoutedEvent]:
                 },
             )
 
-    # === Rule-driven classification (heuristic / claim / constraint) ===
-    # These three rule paths live in harness/rules.yaml so they can be edited
-    # and contracted to eval fixtures without touching code (Tsinghua NLAH).
+    # === Rule-driven classification ===
+    # Rules in harness/rules.yaml can be edited and contracted to eval
+    # fixtures without touching code (Tsinghua NLAH). `emit.extra` lets each
+    # rule populate type-specific fields (failure_mode, tool_name, etc.) via
+    # `{from: <attr>, max_chars: ?}` — see harness/loader.py:resolve_extra.
     ruleset = _get_ruleset()
     if ruleset is not None:
-        from harness.loader import classify_with_rules  # local import; cached
+        from harness.loader import classify_with_rules, resolve_extra  # noqa: E402
         emit = classify_with_rules(ev, ruleset)
         if emit is not None:
+            extra = {"rule_id": emit.get("rule_id", "")}
+            extra.update(resolve_extra(emit, ev))
             return RoutedEvent(
                 candidate=ev,
                 route=emit.get("route", "staged"),
@@ -655,7 +643,7 @@ def classify_and_route(ev: CandidateEvent) -> Optional[RoutedEvent]:
                 provenance=emit.get("provenance", "unknown"),
                 confidence=emit.get("confidence", "low"),
                 distilled=content[:300],
-                extra={"rule_id": emit.get("rule_id", "")},
+                extra=extra,
             )
 
     # === Detect explicit decision ===
