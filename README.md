@@ -138,19 +138,21 @@ Every change runs against four executable contracts. CI ([.github/workflows/eval
 pip install -e ".[dev]"
 
 # 1. Regression evals — 15 fixtures + 1 known gap, false_promotion_rate must stay at 0%
-python3 scripts/run_evals.py
+insight-forge eval
 
 # 2. Harness contracts — every rule's must_fire_on / must_not_fire_on must hold
-python3 scripts/run_evals.py --verify-contracts
+insight-forge eval --verify-contracts
 
-# 3. Unit tests — YAML fallback, harness predicates, evidence schema, contracts
+# 3. Unit tests — YAML fallback, harness predicates, evidence schema, contracts, CLI
 pytest
 
 # 4. Evidence bundles — schema valid AND every quote traceable to its source transcript
-python3 scripts/validate_evidence.py --evals
+insight-forge validate-evidence --evals
 ```
 
 The fourth gate is the one that makes *"every suggestion cites your transcripts"* executable, not a slogan: a bundle with an invented quote fails the build.
+
+The CLI is a thin wrapper — every subcommand maps to one of the existing scripts under `scripts/` (and running `python3 scripts/run_evals.py --verify-contracts` directly stays supported, in particular for the SKILL.md flow which doesn't `pip install`). Run `insight-forge doctor` to diagnose your local environment.
 
 ---
 

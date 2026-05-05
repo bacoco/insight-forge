@@ -25,22 +25,29 @@ jobs:
         with:
           python-version: ${{ matrix.python-version }}
 
-      - name: Install runtime + dev deps
+      - name: Install package + dev deps
         run: |
           python -m pip install --upgrade pip
-          pip install pyyaml pytest jsonschema
+          pip install -e ".[dev]"
+
+      # Sanity: the CLI must boot. Catches packaging mistakes (missing
+      # __init__.py, broken entry point) before downstream gates run.
+      - name: CLI smoke test
+        run: |
+          insight-forge --version
+          insight-forge --help
 
       - name: Regression evals
-        run: python3 scripts/run_evals.py
+        run: insight-forge eval
 
       - name: Verify harness contracts
-        run: python3 scripts/run_evals.py --verify-contracts
+        run: insight-forge eval --verify-contracts
 
       - name: Proposer dry-run
-        run: python3 scripts/propose_rules.py --dry-run
+        run: insight-forge propose --dry-run
 
       - name: Unit tests
-        run: python3 -m pytest tests/ -v
+        run: pytest
 
-      - name: Validate evidence bundle schema
-        run: python3 scripts/validate_evidence.py --evals
+      - name: Validate evidence bundle schema + traceability
+        run: insight-forge validate-evidence --evals
