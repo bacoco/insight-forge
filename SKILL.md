@@ -324,13 +324,26 @@ Override `.last_run` and process from a specific date. Useful for backfill.
 
 ## Scripts
 
+**User-facing entry point** — what the skill invokes when triggered:
+
+- `scripts/run.py` — single-command orchestrator. Reads `.last_run`, calls the right extractor(s) with `--since`, runs the pipeline, generates the proposal, prints the friendly summary, updates the cursor. **This is what the skill calls.** Everything else below is invoked transitively by it.
+
+**Pipeline internals** (called by `run.py`):
+
 - `scripts/extract_claude.py` — locate `~/.claude/projects/<encoded-cwd>/*.jsonl`, output filtered events
 - `scripts/extract_codex.py` — locate `~/.codex/sessions/YYYY/MM/DD/rollout-*.jsonl`, filter by `<environment_context>` cwd
-- `scripts/normalize.py` — convert either format to a common pivot schema
-- `scripts/pipeline.py` — Harvester → Router → Maturity, the ARA core
+- `scripts/pipeline.py` — Harvester → Router → Maturity, the ARA core. Lazy-loads classifier rules from `harness/rules.yaml`. Writes evidence bundles to `.insight-forge/evidence/bundles/`.
 - `scripts/render_evidence.py` — iMessage-style HTML annex (adapted from creation-autopsy)
-- `scripts/propose_claude_md.py` — generate the diff proposal
+- `scripts/propose_claude_md.py` — generate the diff proposal. Splices quotes from evidence bundles into the markdown; prints the friendly summary on stderr.
+
+**On-demand modes** (user-invocable through `run.py` flags):
+
 - `scripts/council.py` — prepare a 5-attacker council session for a single entry (no LLM calls itself; agent orchestrates)
+
+**Contributor tooling** (not invoked by the skill — for maintaining the project itself):
+
+- `scripts/run_evals.py` — regression eval harness. Runs synthetic transcripts under `evals/fixtures/` through the pipeline and asserts behavior. `--verify-contracts` validates each rule against its `must_fire_on` / `must_not_fire_on` fixtures.
+- `scripts/propose_rules.py` — eval-graded mutation search over `harness/rules.yaml`. Generates candidate edits to classifier rules; writes proposals to `harness/proposals/`. Never auto-applies.
 
 ## Compatibility
 
