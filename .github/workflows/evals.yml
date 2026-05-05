@@ -51,3 +51,28 @@ jobs:
 
       - name: Validate evidence bundle schema + traceability
         run: insight-forge validate-evidence --evals
+
+  build:
+    # Catches packaging regressions early — wheel + sdist must build, twine
+    # must accept the metadata. Decoupled from the evals matrix so a
+    # packaging-only break is one job, not 3.
+    runs-on: ubuntu-latest
+
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Set up Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+
+      - name: Install build tooling
+        run: |
+          python -m pip install --upgrade pip
+          pip install build twine
+
+      - name: Build sdist + wheel
+        run: python -m build
+
+      - name: Verify package metadata with twine
+        run: twine check dist/*
