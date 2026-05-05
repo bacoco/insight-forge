@@ -41,12 +41,18 @@ Homepage = "https://github.com/bacoco/insight-forge"
 Issues = "https://github.com/bacoco/insight-forge/issues"
 Documentation = "https://github.com/bacoco/insight-forge/blob/main/docs/how-it-works.md"
 
+[project.scripts]
+# Installs an `insight-forge` console_scripts entry point. The CLI is a
+# thin wrapper that dispatches to the existing scripts/ — running them
+# directly stays the documented, supported way (and is what SKILL.md
+# uses, since the skill clones the repo rather than pip-installing).
+insight-forge = "insight_forge.cli:main"
+
 [tool.setuptools]
-# Script-oriented project — no python package to ship via setuptools.
-# `pip install -e .` makes the dev workflow ergonomic without forcing a
-# package layout on the codebase.
-py-modules = []
-packages = []
+# Only the small CLI dispatcher package ships with the wheel. The pipeline
+# itself lives in scripts/ and stays script-oriented (the project's house
+# style).
+packages = ["insight_forge"]
 
 [tool.pytest.ini_options]
 testpaths = ["tests"]
