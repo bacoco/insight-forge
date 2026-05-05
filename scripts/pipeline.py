@@ -262,7 +262,8 @@ class ForgeState:
         self._init_dirs()
 
     def _init_dirs(self):
-        for sub in ["logic", "trace", "staging", "evidence", "proposals", ".cache"]:
+        for sub in ["logic", "trace", "staging", "evidence", "evidence/bundles",
+                    "proposals", ".cache"]:
             (self.dir / sub).mkdir(parents=True, exist_ok=True)
 
     def init_if_missing(self, project_name: str = ""):
@@ -278,7 +279,8 @@ class ForgeState:
             "logic/dead_ends.md": "# Dead Ends\n",
             "logic/concepts.md": "# Concepts\n",
             "logic/constraints.md": "# Constraints\n",
-            "evidence/README.md": "# Evidence\n\nRendered session transcripts (iMessage-style HTML) live here.\n",
+            "evidence/README.md": "# Evidence\n\n- `bundles/` — machine-readable provenance (one YAML per crystallized entry)\n- Rendered session transcripts (iMessage-style HTML) live here.\n",
+            "evidence/bundles/README.md": "# Evidence bundles\n\nOne YAML file per crystallized entry. Schema:\n\n```yaml\nentry_id: H01\ntarget_layer: heuristic\ncrystallized_via: verbal-affirmation\ncreated_at: 2026-05-05T12:34:56+00:00\nfrom_staging: O03\nsessions: [aaaa1111]\nevidence:\n  - kind: trigger\n    role: user\n    quote: \"Always use pnpm not npm\"\n  - kind: verbal-affirmation\n    role: user\n    quote: \"yes parfait, on part sur pnpm\"\ncounter_evidence:\n  text: \"Doesn't apply when …\"\n  source: deterministic-template\npromotion_gate:\n  passed: true\n  reason: \"User affirmation phrase\"\n```\n",
             "proposals/README.md": "# Proposals\n\nPending updates to `CLAUDE.md` / `AGENTS.md` for user review.\n",
         }
         for rel, content in seeds.items():
@@ -880,6 +882,11 @@ def evaluate_maturity(obs: dict, all_candidates: list[CandidateEvent],
 # Writers — turn typed data into ARA files
 # ============================================================
 
+def _bundle_line(fields: dict) -> str:
+    bundle = fields.get("evidence_bundle", "")
+    return f"\n- **Evidence bundle**: {bundle}" if bundle else ""
+
+
 def write_dead_end(state: ForgeState, did: str, fields: dict):
     md = f"""
 ## {did}: {fields.get('title', 'untitled')}
@@ -890,7 +897,7 @@ def write_dead_end(state: ForgeState, did: str, fields: dict):
 - **Provenance**: {fields.get('provenance', 'unknown')}
 - **Code refs**: {fields.get('code_refs', '[pending]')}
 - **Sessions**: [{', '.join(fields.get('sessions', []))}]
-- **Avoid signal**: {fields.get('avoid_signal', '[pending]')}
+- **Avoid signal**: {fields.get('avoid_signal', '[pending]')}{_bundle_line(fields)}
 """
     state.append_md("logic/dead_ends.md", md.strip())
 
@@ -908,7 +915,7 @@ def write_claim(state: ForgeState, cid: str, fields: dict):
 - **Dependencies**: {fields.get('dependencies', '[]')}
 - **Tags**: {fields.get('tags', '')}
 - **From staging**: {fields.get('from_staging', '?')}
-- **Sessions**: [{', '.join(fields.get('sessions', []))}]
+- **Sessions**: [{', '.join(fields.get('sessions', []))}]{_bundle_line(fields)}
 """
     state.append_md("logic/claims.md", md.strip())
 
@@ -924,7 +931,7 @@ def write_heuristic(state: ForgeState, hid: str, fields: dict):
 - **Code refs**: {fields.get('code_refs', '[pending]')}
 - **Counter-cases**: {fields.get('counter_cases', 'not_explored')}
 - **From staging**: {fields.get('from_staging', '?')}
-- **Sessions**: [{', '.join(fields.get('sessions', []))}]
+- **Sessions**: [{', '.join(fields.get('sessions', []))}]{_bundle_line(fields)}
 """
     state.append_md("logic/heuristics.md", md.strip())
 
@@ -938,7 +945,7 @@ def write_concept(state: ForgeState, kid: str, fields: dict):
 - **Crystallized via**: {fields.get('crystallized_via', '?')}
 - **Counter-evidence**: {fields.get('counter_evidence', 'not_explored')}
 - **From staging**: {fields.get('from_staging', '?')}
-- **Sessions**: [{', '.join(fields.get('sessions', []))}]
+- **Sessions**: [{', '.join(fields.get('sessions', []))}]{_bundle_line(fields)}
 """
     state.append_md("logic/concepts.md", md.strip())
 
@@ -952,9 +959,93 @@ def write_constraint(state: ForgeState, rid: str, fields: dict):
 - **Crystallized via**: {fields.get('crystallized_via', '?')}
 - **Counter-evidence**: {fields.get('counter_evidence', 'not_explored')}
 - **From staging**: {fields.get('from_staging', '?')}
-- **Sessions**: [{', '.join(fields.get('sessions', []))}]
+- **Sessions**: [{', '.join(fields.get('sessions', []))}]{_bundle_line(fields)}
 """
     state.append_md("logic/constraints.md", md.strip())
+
+
+def write_evidence_bundle(state: ForgeState, entry_id: str, target_layer: str,
+                           obs: dict, decision: "CrystallizationDecision",
+                           candidates: list["CandidateEvent"]) -> Path:
+    """Persist a machine-readable evidence bundle for a crystallized entry.
+
+    Lives at .insight-forge/evidence/bundles/<entry_id>.yaml. Referenced from
+    the markdown logic file via the 'Evidence bundle' field. Lets downstream
+    tools (run_evals.py, council, dashboards) query provenance without
+    re-parsing markdown.
+    """
+    obs_session = obs.get("session_id", "")
+    obs_ts = obs.get("timestamp", "")
+
+    # Trigger event = the original observation
+    evidence: list[dict] = [{
+        "kind": "trigger",
+        "role": "user" if obs.get("provenance") == "user" else "assistant",
+        "timestamp": obs_ts,
+        "session_id": obs_session,
+        "quote": (obs.get("content") or "")[:280],
+    }]
+
+    # Closure event = whatever fired the signal (best-effort reconstruction)
+    if decision.fired_signal == "verbal-affirmation":
+        for c in candidates:
+            if (c.session_short == obs_session and c.role == "user"
+                    and c.timestamp > obs_ts
+                    and contains_any(c.content, AFFIRMATION_PHRASES)):
+                evidence.append({
+                    "kind": "verbal-affirmation",
+                    "role": "user",
+                    "timestamp": c.timestamp,
+                    "session_id": obs_session,
+                    "quote": (c.content or "")[:280],
+                })
+                break
+    elif decision.fired_signal == "empirical-resolution":
+        for c in candidates:
+            if (c.session_short == obs_session and c.role == "tool_result"
+                    and c.timestamp > obs_ts):
+                evidence.append({
+                    "kind": "empirical-resolution",
+                    "role": "tool_result",
+                    "timestamp": c.timestamp,
+                    "tool": c.tool_name or "",
+                    "tool_status": c.tool_status or "",
+                    "session_id": obs_session,
+                    "quote": (c.content or "")[:280],
+                })
+                break
+    elif decision.fired_signal == "topic-abandonment":
+        evidence.append({
+            "kind": "topic-abandonment",
+            "session_id": obs_session,
+            "note": "Topic absent from the next 5 sessions (keyword scan).",
+        })
+
+    bundle = {
+        "entry_id": entry_id,
+        "target_layer": target_layer,
+        "crystallized_via": decision.fired_signal,
+        "created_at": datetime.now(timezone.utc).isoformat(timespec="seconds"),
+        "from_staging": obs.get("id", ""),
+        "sessions": [obs_session] if obs_session else [],
+        "evidence": evidence,
+        "counter_evidence": {
+            "text": decision.counter_evidence or "not_explored",
+            "source": "deterministic-template",
+        },
+        "promotion_gate": {
+            "passed": True,
+            "reason": decision.reason,
+        },
+    }
+
+    out = state.dir / "evidence" / "bundles" / f"{entry_id}.yaml"
+    if _HAS_PYYAML:
+        out.write_text(_yaml.safe_dump(bundle, allow_unicode=True,
+                                        default_flow_style=False), encoding="utf-8")
+    else:
+        out.write_text(yaml_dump_simple(bundle) + "\n", encoding="utf-8")
+    return out
 
 
 def append_tree_node(state: ForgeState, node: dict):
@@ -1149,6 +1240,7 @@ def run_pipeline(input_path: Path, forge_dir: Path,
             "from_staging": obs.get("id", ""),
             "sessions": [obs.get("session_id", "")],
             "counter_evidence": decision.counter_evidence,
+            "evidence_bundle": f"evidence/bundles/{new_id}.yaml",
         }
 
         if target == "dead_end":
@@ -1199,11 +1291,15 @@ def run_pipeline(input_path: Path, forge_dir: Path,
             crystallized_count -= 1
             continue
 
+        # Persist machine-readable evidence bundle alongside the markdown entry.
+        write_evidence_bundle(state, new_id, target, obs, decision, candidates)
+
         # Mark observation as promoted
         update_observation(state, obs.get("id", ""), {
             "promoted": True,
             "promoted_to": f"logic/{target}s.md:{new_id}",
             "crystallized_via": decision.fired_signal,
+            "evidence_bundle": f"evidence/bundles/{new_id}.yaml",
         })
 
     print(f"[insight-forge] Stage 3 — {crystallized_count} crystallized",

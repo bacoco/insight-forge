@@ -1,0 +1,19 @@
+# Expected outcome for evals/fixtures/abandoned_topic.jsonl
+# Postgres connection-pooling claim mentioned in session 1, never revisited
+# in the next 5 sessions. detect_topic_abandonment() requires k=5 sessions
+# without keyword recurrence.
+crystallized:
+  total: 1
+  by_layer:
+    heuristic: 0
+    claim: 1
+    dead_end: 0
+    constraint: 0
+    concept: 0
+staged_only: 0
+expected_signals:
+  - topic-abandonment
+must_have_evidence_bundle: true
+must_have_counter_evidence: true
+notes: |
+  Topic-abandonment closure signal — exercises the cross-session window logic.

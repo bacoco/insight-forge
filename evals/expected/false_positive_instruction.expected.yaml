@@ -1,0 +1,19 @@
+# Expected outcome for evals/fixtures/false_positive_instruction.jsonl
+# A long task instruction with "must" verbs that MUST NOT be staged as a constraint.
+# This is the regression test for issue #13.
+crystallized:
+  total: 0
+  by_layer:
+    heuristic: 0
+    claim: 0
+    dead_end: 0
+    constraint: 0
+    concept: 0
+staged_only: 0
+expected_signals: []
+must_have_evidence_bundle: false
+must_have_counter_evidence: false
+notes: |
+  The user message is >400 chars and starts with "Fix" (imperative). The constraint
+  classifier in pipeline.classify_and_route() must skip it. Any non-zero value here
+  is a regression for issue #13.

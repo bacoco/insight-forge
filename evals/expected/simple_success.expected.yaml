@@ -1,0 +1,18 @@
+# Expected outcome for evals/fixtures/simple_success.jsonl
+# A user heuristic confirmed by a verbal affirmation within 3 turns.
+crystallized:
+  total: 1
+  by_layer:
+    heuristic: 1
+    claim: 0
+    dead_end: 0
+    constraint: 0
+    concept: 0
+staged_only: 0
+expected_signals:
+  - verbal-affirmation
+must_have_evidence_bundle: true
+must_have_counter_evidence: true
+notes: |
+  pnpm-vs-npm rule with affirmative confirmation. Should fire verbal-affirmation,
+  promote to logic/heuristics.md, and create an evidence bundle.

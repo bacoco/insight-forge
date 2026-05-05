@@ -1,0 +1,18 @@
+# Expected outcome for evals/fixtures/empirical_resolution.jsonl
+# Assistant claim followed by a successful tool result with keyword overlap.
+crystallized:
+  total: 1
+  by_layer:
+    heuristic: 0
+    claim: 1
+    dead_end: 0
+    constraint: 0
+    concept: 0
+staged_only: 0
+expected_signals:
+  - empirical-resolution
+must_have_evidence_bundle: true
+must_have_counter_evidence: true
+notes: |
+  Claim should crystallize as 'supported' via empirical-resolution because the
+  tool_result content shares "production"/"build"/"checks" keywords with the claim.
