@@ -149,12 +149,19 @@ def _check_atom(key: str, expected: Any, ev: Any, ruleset: RuleSet) -> bool:
 
 
 def _matches(predicate: dict, ev: Any, ruleset: RuleSet) -> bool:
-    """Evaluate a predicate. AND of plain keys; supports `any:` for OR."""
+    """Evaluate a predicate. AND of plain keys; supports `any:` for OR.
+
+    Special composite keys:
+      - `any: [pred1, pred2, ...]`  — OR of sub-predicates
+      - `all: [pred1, pred2, ...]`  — explicit AND of sub-predicates
+      - `previous_event: { ... }`   — predicate evaluated against the
+        previous event's prev_role / prev_content (synthesized as a
+        minimal event so the same predicate vocabulary applies).
+    """
     if not predicate:
         return True
     for key, value in predicate.items():
         if key == "any":
-            # value is a list of sub-predicates joined by OR
             if not any(_matches(sub, ev, ruleset) for sub in (value or [])):
                 return False
             continue
@@ -162,9 +169,53 @@ def _matches(predicate: dict, ev: Any, ruleset: RuleSet) -> bool:
             if not all(_matches(sub, ev, ruleset) for sub in (value or [])):
                 return False
             continue
+        if key == "previous_event":
+            # Build a stub event from prev_* fields. The harvester populates
+            # prev_role / prev_content with the previous event in the same
+            # session (or empty strings when none exists). tool_status and
+            # tool_name aren't tracked for prev events yet — the predicates
+            # that need them won't match, which is the safe default.
+            from types import SimpleNamespace
+            prev = SimpleNamespace(
+                role=getattr(ev, "prev_role", "") or "",
+                content=getattr(ev, "prev_content", "") or "",
+                tool_status=None,
+                tool_name=None,
+            )
+            if not _matches(value, prev, ruleset):
+                return False
+            continue
         if not _check_atom(key, value, ev, ruleset):
             return False
     return True
+
+
+def resolve_extra(emit: dict, ev: Any) -> dict:
+    """Resolve `emit.extra` entries against the candidate event.
+
+    Each value in `emit.extra` is either:
+      - a literal (string, int, list, etc.) — used as-is
+      - a mapping `{from: <attr_name>, max_chars: <int?>}` — read the named
+        attribute from the event, optionally truncate
+
+    This lets rules populate type-specific fields (failure_mode, tool_name,
+    rescue_condition, ...) without each detector needing its own Python
+    branch in classify_and_route().
+    """
+    result: dict[str, Any] = {}
+    raw = emit.get("extra") or {}
+    for key, value in raw.items():
+        if isinstance(value, dict) and "from" in value:
+            attr = value["from"]
+            attr_value = getattr(ev, attr, "") or ""
+            attr_value = str(attr_value)
+            max_chars = value.get("max_chars")
+            if max_chars is not None:
+                attr_value = attr_value[: int(max_chars)]
+            result[key] = attr_value
+        else:
+            result[key] = value
+    return result
 
 
 # ---------------------------------------------------------------------------

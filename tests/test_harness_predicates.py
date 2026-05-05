@@ -151,3 +151,96 @@ def test_all_composition_explicit():
     pred = {"all": [{"role": "user"}, {"content_length_gt": 5}]}
     assert _matches(pred, _ev(role="user", content="long message"), rs)
     assert not _matches(pred, _ev(role="user", content="hi"), rs)
+
+
+# --- previous_event composite predicate --------------------------------
+
+def test_previous_event_matches_role():
+    rs = _rs()
+    ev = _ev(role="user", content="anything",
+              prev_role="tool_result", prev_content="error: file not found")
+    pred = {"previous_event": {"role": "tool_result"}}
+    assert _matches(pred, ev, rs)
+
+
+def test_previous_event_does_not_match_when_role_differs():
+    rs = _rs()
+    ev = _ev(role="user", content="anything",
+              prev_role="assistant", prev_content="some message")
+    pred = {"previous_event": {"role": "tool_result"}}
+    assert not _matches(pred, ev, rs)
+
+
+def test_previous_event_with_regex():
+    rs = _rs()
+    ev = _ev(role="user", content="now what?",
+              prev_role="tool_result",
+              prev_content="ModuleNotFoundError: No module named 'jwt'")
+    pred = {"previous_event": {
+        "role": "tool_result",
+        "content_matches_regex": r"ModuleNotFoundError",
+    }}
+    assert _matches(pred, ev, rs)
+
+
+def test_previous_event_handles_missing_prev_fields():
+    """First event in a session has no previous — predicate should return
+    False for any condition rather than crash."""
+    rs = _rs()
+    ev = _ev(role="user", content="first turn")  # no prev_role / prev_content
+    pred = {"previous_event": {"role": "assistant"}}
+    assert not _matches(pred, ev, rs)
+
+
+def test_previous_event_combined_with_other_predicates():
+    """previous_event composes with the rest of the predicate (AND)."""
+    rs = _rs()
+    ev_match = _ev(role="user", content="ok let's continue",
+                    prev_role="tool_result")
+    ev_fail_role = _ev(role="assistant", content="ok let's continue",
+                        prev_role="tool_result")
+    ev_fail_prev = _ev(role="user", content="ok let's continue",
+                        prev_role="user")
+    pred = {"role": "user", "previous_event": {"role": "tool_result"}}
+    assert _matches(pred, ev_match, rs)
+    assert not _matches(pred, ev_fail_role, rs)
+    assert not _matches(pred, ev_fail_prev, rs)
+
+
+# --- resolve_extra() — emit.extra resolution ---------------------------
+
+def test_resolve_extra_passes_literals_through():
+    from harness.loader import resolve_extra
+    emit = {"extra": {"answer": 42, "tag": "literal", "ok": True}}
+    out = resolve_extra(emit, _ev())
+    assert out == {"answer": 42, "tag": "literal", "ok": True}
+
+
+def test_resolve_extra_reads_event_attribute():
+    from harness.loader import resolve_extra
+    emit = {"extra": {"failure_mode": {"from": "content"}}}
+    out = resolve_extra(emit, _ev(content="ImportError: jwt"))
+    assert out == {"failure_mode": "ImportError: jwt"}
+
+
+def test_resolve_extra_truncates_with_max_chars():
+    from harness.loader import resolve_extra
+    long = "x" * 500
+    emit = {"extra": {"failure_mode": {"from": "content", "max_chars": 100}}}
+    out = resolve_extra(emit, _ev(content=long))
+    assert len(out["failure_mode"]) == 100
+
+
+def test_resolve_extra_handles_missing_attribute():
+    """`{from: tool_name}` against an event without tool_name should produce
+    an empty string, not crash."""
+    from harness.loader import resolve_extra
+    emit = {"extra": {"tool": {"from": "tool_name"}}}
+    out = resolve_extra(emit, _ev())
+    assert out == {"tool": ""}
+
+
+def test_resolve_extra_empty_when_no_extra_block():
+    from harness.loader import resolve_extra
+    assert resolve_extra({}, _ev()) == {}
+    assert resolve_extra({"extra": None}, _ev()) == {}
