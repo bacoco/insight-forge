@@ -165,6 +165,47 @@ def extract_candidate_phrases(fixture_text: str, max_token_len: int = 3) -> list
     return candidates
 
 
+# Predicates worth trying when the proposer wants to TIGHTEN a rule
+# (close a false positive). Order is rough specificity ascending — the
+# scorer will pick the one that closes the gap with the fewest regressions.
+_COMMON_UNLESS_ATOMS: list[dict] = [
+    {"content_starts_with_imperative": True},
+    {"matches_meta_work_prefix": True},
+    {"content_length_gt": 200},
+    {"content_length_gt": 400},
+]
+
+
+def extract_prev_roles(fixture_text: str) -> list[str]:
+    """Return the distinct `prev_role` values implied by event ordering.
+
+    The harvester computes prev_role as the role of the immediately
+    preceding event in the same session. We approximate that here by
+    walking the JSONL in order and collecting the role of each event
+    that follows another non-marker event.
+    """
+    roles: list[str] = []
+    seen: set[str] = set()
+    last_role: str | None = None
+    for line in fixture_text.splitlines():
+        line = line.strip()
+        if not line:
+            continue
+        try:
+            obj = json.loads(line)
+        except json.JSONDecodeError:
+            continue
+        if obj.get("_marker"):
+            last_role = None  # session boundary resets prev
+            continue
+        role = obj.get("role")
+        if last_role and last_role not in seen:
+            roles.append(last_role)
+            seen.add(last_role)
+        last_role = role
+    return roles
+
+
 # ---------------------------------------------------------------------------
 # Mutation operators
 # ---------------------------------------------------------------------------
@@ -197,6 +238,49 @@ def mutation_regex_alternation_extend(rule: dict, candidate: str) -> dict:
         new_rule["when"] = when
         return new_rule
     return None
+
+
+def mutation_add_unless_predicate(rule: dict, predicate_atom: dict) -> dict:
+    """Tighten a rule by adding a new entry to its `unless:` block.
+
+    `predicate_atom` is a single key/value (e.g. `{"content_length_gt": 200}`).
+    If the rule already has an `unless:` it gets joined under `any:` (OR).
+
+    Returns None if the predicate is already present.
+    """
+    new_rule = json.loads(json.dumps(rule))
+    unless = new_rule.get("unless") or {}
+
+    # Normalize: if `unless` is a flat dict (no `any:` / `all:`), wrap its
+    # entries in an `any:` list so adding a new branch is a list append.
+    if "any" not in unless and "all" not in unless and unless:
+        unless = {"any": [{k: v} for k, v in unless.items()]}
+    elif not unless:
+        unless = {"any": []}
+
+    branch_list: list[dict] = unless.get("any") or []
+    if predicate_atom in branch_list:
+        return None
+    branch_list.append(predicate_atom)
+    unless["any"] = branch_list
+
+    new_rule["unless"] = unless
+    return new_rule
+
+
+def mutation_add_context_predicate(rule: dict, prev_role: str) -> dict:
+    """Add a `previous_event:` constraint on the previous event's role.
+
+    Refuses to overwrite an existing `previous_event:` block — that would
+    silently drop information. Returns None instead.
+    """
+    new_rule = json.loads(json.dumps(rule))
+    when = new_rule.get("when") or {}
+    if "previous_event" in when:
+        return None
+    when["previous_event"] = {"role": prev_role}
+    new_rule["when"] = when
+    return new_rule
 
 
 # ---------------------------------------------------------------------------
@@ -258,19 +342,60 @@ def score_candidate(rules_data: dict, baseline: dict, gap_fixtures: list[str]) -
 # Proposal writer
 # ---------------------------------------------------------------------------
 
+def _apply_mutation(mtype: str, rule: dict, marg) -> "dict | None":
+    """Dispatch to the right mutation operator. Returns None if mtype is
+    unknown or the mutation can't apply."""
+    if mtype == "regex_alternation_extend":
+        return mutation_regex_alternation_extend(rule, marg)
+    if mtype == "add_unless_predicate":
+        return mutation_add_unless_predicate(rule, marg)
+    if mtype == "add_context_predicate":
+        return mutation_add_context_predicate(rule, marg)
+    return None
+
+
+def _describe(marg) -> str:
+    """Compact human-readable form of a mutation argument for log output."""
+    if isinstance(marg, dict):
+        return ", ".join(f"{k}={v}" for k, v in marg.items())
+    return f"'{marg}'"
+
+
+def _specificity(mtype: str, marg) -> int:
+    """Tiebreak metric: how 'specific' is this candidate?
+
+    More specific = less likely to over-fire on unseen sessions. We score:
+      - regex extend: number of tokens in the candidate (more = more specific)
+      - add_unless:   higher length thresholds = more specific
+      - add_context:  always specific (depends on a precise prev role)
+    """
+    if mtype == "regex_alternation_extend":
+        return len(str(marg).split())
+    if mtype == "add_unless_predicate" and isinstance(marg, dict):
+        # Length thresholds: prefer larger thresholds (less likely to filter
+        # things we want to keep). Boolean atoms get a baseline 1.
+        if "content_length_gt" in marg:
+            return int(marg["content_length_gt"]) // 100
+        return 1
+    if mtype == "add_context_predicate":
+        return 2
+    return 0
+
+
 def write_proposal(target_rule_id: str, gap_fixture: str,
                     base_rule: dict, mutated_rule: dict,
-                    candidate_phrase: str, score_info: dict,
+                    mutation_type: str, mutation_arg, score_info: dict,
                     out_dir: Path) -> Path:
     out_dir.mkdir(parents=True, exist_ok=True)
     ts = datetime.now(timezone.utc).strftime("%Y-%m-%dT%H-%M-%SZ")
     out = out_dir / f"{ts}-{target_rule_id}.yaml"
     proposal = {
         "created_at": datetime.now(timezone.utc).isoformat(timespec="seconds"),
-        "proposer": "deterministic-mutation-search-v1",
+        "proposer": "deterministic-mutation-search-v2",
         "target_rule": target_rule_id,
         "gap_fixture": gap_fixture,
-        "candidate_phrase": candidate_phrase,
+        "mutation_type": mutation_type,
+        "mutation_arg": mutation_arg,
         "metric_delta": {
             "fixtures_fixed": score_info["fixtures_fixed"],
             "regressions": score_info["regressions"],
@@ -338,43 +463,59 @@ def main():
             print(f"[propose] target rule {target_rule} not found in rules.yaml — skipping")
             continue
 
-        candidates = extract_candidate_phrases(fixture_path.read_text(encoding="utf-8"))
-        candidates = candidates[:args.max_candidates]
-        print(f"[propose] evaluating {len(candidates)} candidate phrase(s)...")
+        # Build the candidate space — three mutation operators, each with
+        # its own argument shape. Score each, keep the best across all three.
+        fixture_text = fixture_path.read_text(encoding="utf-8")
+        phrases = extract_candidate_phrases(fixture_text)[:args.max_candidates]
+        prev_roles = extract_prev_roles(fixture_text)
+
+        candidates: list[tuple[str, object]] = []
+        for phrase in phrases:
+            candidates.append(("regex_alternation_extend", phrase))
+        for atom in _COMMON_UNLESS_ATOMS:
+            candidates.append(("add_unless_predicate", atom))
+        for role in prev_roles:
+            candidates.append(("add_context_predicate", role))
+
+        print(f"[propose] evaluating {len(candidates)} candidate(s) "
+              f"across 3 mutation operators...")
 
         best = None
-        for cand in candidates:
-            mutated = mutation_regex_alternation_extend(base_rule, cand)
+        for mtype, marg in candidates:
+            mutated = _apply_mutation(mtype, base_rule, marg)
             if mutated is None:
                 continue
             new_rules = make_candidate_rules(base_rules, target_rule, mutated)
             info = score_candidate(new_rules, baseline, gap_fixtures=[stem])
             tag = "✓" if info["score"] > 0 else ("·" if info["score"] == 0 else "✗")
-            print(f"  {tag} '{cand}' → score={info['score']} ({info['reason']})")
+            print(f"  {tag} {mtype}({_describe(marg)}) → "
+                  f"score={info['score']} ({info['reason']})")
             if info["score"] != float("-inf") and info["score"] > 0:
-                # Tiebreak: prefer longer (more specific) candidates so the
-                # mutation doesn't over-fire in the wild on a single common token.
-                cand_specificity = len(cand.split())
+                # Tiebreak: prefer the most specific candidate so the mutation
+                # doesn't over-fire in the wild on a single common token.
+                specificity = _specificity(mtype, marg)
                 better = (best is None
                           or info["score"] > best["score"]
                           or (info["score"] == best["score"]
-                              and cand_specificity > best["specificity"]))
+                              and specificity > best["specificity"]))
                 if better:
-                    best = {"score": info["score"], "candidate": cand,
+                    best = {"score": info["score"], "mtype": mtype, "marg": marg,
                             "mutated": mutated, "info": info,
-                            "specificity": cand_specificity}
+                            "specificity": specificity}
 
         if best is None:
             print(f"[propose] No mutation closed gap {stem} without regressions.")
             continue
 
         if args.dry_run:
-            print(f"\n[propose] (dry-run) Best mutation for {stem}: extend {target_rule} "
-                  f"with '{best['candidate']}' (score={best['score']})")
+            print(f"\n[propose] (dry-run) Best mutation for {stem}: "
+                  f"{best['mtype']}({_describe(best['marg'])}) "
+                  f"on {target_rule} (score={best['score']})")
             print(dump_yaml({"before": base_rule, "after": best["mutated"]}))
         else:
             out = write_proposal(target_rule, stem, base_rule, best["mutated"],
-                                  best["candidate"], best["info"], PROPOSALS_DIR)
+                                  best["mtype"], best["marg"], best["info"],
+                                  PROPOSALS_DIR)
             proposals_written.append(out)
             print(f"[propose] Proposal written: {out.relative_to(REPO_ROOT)}")
 
