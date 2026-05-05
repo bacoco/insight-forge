@@ -173,12 +173,51 @@ Three things this gives you:
    name the fixtures the rule is responsible for. `python3 scripts/run_evals.py
    --verify-contracts` enforces them. A rule whose contract fails is a rule
    that can't ship.
-3. **It builds the substrate for measured improvement.** Once the harness
-   is data with measurable contracts (Tsinghua *NLAH*, Stanford *Meta-Harness*),
-   any future "smarter" rule proposer is graded by the same metric the
-   project optimizes for: keep `false_promotion_rate` at zero.
+3. **It builds the substrate for measured improvement** — see below.
 
 Full spec: [`harness/README.md`](harness/README.md).
+
+---
+
+## The proposer closes the loop
+
+Once the harness is data with measurable contracts, you can have a script
+edit it for you and grade itself by the metric you actually care about.
+
+```bash
+python3 scripts/propose_rules.py
+```
+
+```
+[propose] gap fixture: french_heuristic (target: R-HEURISTIC-ALWAYS-NEVER)
+[propose] evaluating 9 candidate phrase(s)...
+  ✓ 'il' → score=1 (ok)
+  ✓ 'il faut' → score=1 (ok)
+  ✓ 'il faut toujours' → score=1 (ok)
+  · 'compris' → score=0 (ok)
+  ...
+[propose] Proposal written: harness/proposals/2026-05-05T12-15-50Z-R-HEURISTIC-ALWAYS-NEVER.yaml
+```
+
+Mark a fixture as a known gap (`known_gap: true` + `target_rule: R-...` in
+its `expected.yaml`) and the proposer will:
+
+1. Generate candidate mutations on the target rule (currently: extending
+   regex alternations with leading 1-3 token phrases extracted from the
+   fixture).
+2. Sandbox each candidate — write a temp `rules.yaml`, run the **full**
+   eval suite + contract verifier against it.
+3. Score `+1` per gap fixture closed, `-∞` for any regression on a passing
+   fixture or any contract violation.
+4. Write the highest-scoring candidate to `harness/proposals/<ts>.yaml` —
+   with the `before`/`after` diff, the metric delta, and apply
+   instructions. **Never** edits `rules.yaml` directly. You review and
+   apply by hand, exactly like the `CLAUDE.md` proposal flow.
+
+This is the Stanford *Meta-Harness* loop — proposer, sandbox, eval,
+contract — done with a deterministic baseline. The mutation generator is
+the single swappable seam: an LLM-based generator drops in without
+changing the sandboxing or scoring code.
 
 ---
 

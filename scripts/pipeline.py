@@ -17,6 +17,7 @@ from __future__ import annotations
 
 import argparse
 import json
+import os
 import re
 import sys
 import unicodedata
@@ -51,7 +52,8 @@ def _get_ruleset():
         try:
             sys.path.insert(0, str(Path(__file__).resolve().parent.parent))
             from harness.loader import load_rules  # noqa: E402
-            _RULESET_CACHE = load_rules()
+            override = os.environ.get("INSIGHT_FORGE_RULES_PATH")
+            _RULESET_CACHE = load_rules(Path(override)) if override else load_rules()
         except Exception as exc:
             print(f"[insight-forge] Warning: could not load harness/rules.yaml: {exc}",
                   file=sys.stderr)

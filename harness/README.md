@@ -118,13 +118,48 @@ each emits unique extra fields the current schema doesn't model. Migrating
 them is mechanical once the schema grows an `extra:` clause — left for a
 future PR so this one stays small and reviewable.
 
-## Why no agentic optimizer yet
+## The proposer
 
-Stanford Meta-Harness needs three things to optimize a harness:
+`scripts/propose_rules.py` closes the Stanford *Meta-Harness* loop:
 
-1. ✅ Harness as data — `rules.yaml`
-2. ✅ Eval contracts — `evals/expected/*.yaml` + `--verify-contracts`
-3. ❌ Proposer that suggests rule edits and is rewarded by eval delta
+1. Reads `rules.yaml` and the eval baseline.
+2. For every fixture marked `known_gap: true` in `evals/expected/`,
+   generates candidate mutations on its `target_rule` (currently:
+   extending regex alternations with 1-3 leading tokens from the
+   fixture's events).
+3. Sandbox-evaluates each candidate — temp `rules.yaml`, full eval suite,
+   contract verifier.
+4. Scores `+1` per gap fixture closed, `-∞` for any regression or contract
+   violation.
+5. Writes the best candidate to `harness/proposals/<ts>.yaml` — never
+   edits `rules.yaml` directly.
 
-Building (3) without (1) and (2) is fantasy. With (1) and (2) in place,
-(3) is a straight engineering task — not in scope for this PR.
+```bash
+# See what mutations the proposer would suggest, without writing files
+python3 scripts/propose_rules.py --dry-run
+
+# Generate proposal files
+python3 scripts/propose_rules.py
+
+# Restrict to one gap
+python3 scripts/propose_rules.py --target-fixture french_heuristic
+```
+
+The v1 proposer is deterministic. The mutation generator is the swappable
+seam — an LLM-based generator can replace it without touching the
+sandboxing or scoring code. See `harness/proposals/README.md` for the
+proposal file format and how to apply one.
+
+## Marking a known gap
+
+Add to `evals/expected/<fixture>.expected.yaml`:
+
+```yaml
+known_gap: true
+target_rule: R-HEURISTIC-ALWAYS-NEVER
+```
+
+The regression eval will skip this fixture (it appears as `[GAP]` in the
+output). The proposer treats it as the optimization target. When a
+proposal is applied, remove these two fields and the regression eval
+starts enforcing the closure.

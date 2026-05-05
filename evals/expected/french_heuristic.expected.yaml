@@ -1,0 +1,30 @@
+# Expected outcome for evals/fixtures/french_heuristic.jsonl
+#
+# This is a KNOWN GAP — the current R-HEURISTIC-ALWAYS-NEVER regex is anchored
+# at the start of the message and the alternation does not include French
+# "il faut" / "faut" patterns, so this user heuristic is currently missed
+# even though the pattern is structurally identical to the English "always X".
+#
+# The regression eval skips known_gap fixtures by default; propose_rules.py
+# operates only on them, generating candidate edits to rules.yaml that close
+# the gap without breaking existing contracts.
+known_gap: true
+target_rule: R-HEURISTIC-ALWAYS-NEVER
+
+crystallized:
+  total: 1
+  by_layer:
+    heuristic: 1
+    claim: 0
+    dead_end: 0
+    constraint: 0
+    concept: 0
+staged_only: 0
+expected_signals:
+  - verbal-affirmation
+must_have_evidence_bundle: true
+must_have_counter_evidence: true
+notes: |
+  "Il faut toujours utiliser X" is a project rule with the same epistemic
+  weight as "Always use X" — the rule should fire and crystallize via
+  verbal-affirmation when the next user turn is "oui parfait, on part sur ça".
