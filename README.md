@@ -162,6 +162,32 @@ One installation. Both agents. No configuration.
 
 ---
 
+## The research it draws on
+
+Two recent academic papers shaped how the project stays trustworthy as it grows. The implementations aren't decorative — they ship in the codebase today.
+
+### The classifier rules live as data, not code
+
+> *Pan et al., **Natural-Language Agent Harnesses**, Tsinghua University, 2026.*
+> arXiv: [2603.25723](https://arxiv.org/abs/2603.25723)
+
+The paper argues that an agent's control logic should live as a portable, editable artifact — not buried in Python regex inside a controller script.
+
+**What this means in insight-forge.** The classifier rules — *what counts as a heuristic, what counts as a constraint, what counts as a falsifiable claim* — live in [`harness/rules.yaml`](harness/rules.yaml). You can edit a regex, add a phrase, tighten a length threshold, all without touching code. Each rule names which test fixtures it must (or must not) fire on, so a careless edit fails immediately with a contract violation. And every promotion writes a `evidence/bundles/<id>.yaml` file naming the exact transcript moment that earned it — readable by humans, queryable by tools.
+
+### A safe loop that improves the rules over time
+
+> *Lee et al., **Meta-Harness: End-to-End Optimization of Model Harnesses**, Stanford University, 2026.*
+> arXiv: [2603.28052](https://arxiv.org/abs/2603.28052)
+
+The paper shows that once a harness is data with measurable contracts, an automated proposer can edit it and grade itself by how the eval metrics move.
+
+**What this means in insight-forge.** When you find a real session where a rule should have fired but didn't, you mark the case as a *known gap* in the test fixtures. Then run [`scripts/propose_rules.py`](scripts/propose_rules.py) — it generates candidate edits, sandboxes each in a temporary copy of `rules.yaml`, runs the full test suite against it, and only surfaces edits that close the gap **without breaking any existing case**. The result lands in `harness/proposals/` for you to review. The proposer never edits `rules.yaml` directly — same conservative contract as the `CLAUDE.md` proposal flow.
+
+The current proposer is deterministic (no LLM cost, fully reproducible). The mutation generator is the single swappable seam — an LLM-based generator drops in without touching the sandboxing or scoring code.
+
+---
+
 ## Built on proven methodology
 
 insight-forge is not a new idea — it's a disciplined combination of existing work:
@@ -175,6 +201,21 @@ insight-forge is not a new idea — it's a disciplined combination of existing w
 What insight-forge adds: cross-session post-hoc processing, agent-agnostic normalization, and Devil's Advocate wired into the crystallization gate — not bolted on after.
 
 Full attribution in [TECHNICAL.md](TECHNICAL.md).
+
+---
+
+## References
+
+Academic papers that directly shape the implementation:
+
+- Pan, L., Zou, L., Guo, S., Ni, J., Zheng, H.-T. (2026). *Natural-Language Agent Harnesses*. Tsinghua University. [arXiv:2603.25723](https://arxiv.org/abs/2603.25723)
+- Lee, Y., Nair, R., Zhang, Q., Lee, K., Khattab, O., Finn, C. (2026). *Meta-Harness: End-to-End Optimization of Model Harnesses*. Stanford University. [arXiv:2603.28052](https://arxiv.org/abs/2603.28052)
+
+Methodology and source projects (full attribution in [TECHNICAL.md](TECHNICAL.md)):
+
+- ARA — [Orchestra-Research/Agent-Native-Research-Artifact](https://github.com/Orchestra-Research/Agent-Native-Research-Artifact)
+- creation-autopsy — [Sandjab/skills-that-kill](https://github.com/Sandjab/skills-that-kill)
+- codex-history-list — [shinshin86/codex-history-list](https://github.com/shinshin86/codex-history-list)
 
 ---
 
