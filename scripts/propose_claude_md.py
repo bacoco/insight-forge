@@ -271,6 +271,11 @@ def main():
                    help="Only include knowledge from sessions on or after this date (YYYY-MM-DD).")
     p.add_argument("--out", type=str, default=None,
                    help="Output path (default: .insight-forge/proposals/<date>.md).")
+    p.add_argument("--redact", action="store_true",
+                   help="Replace likely secrets (AWS/GitHub/OpenAI/Anthropic keys, "
+                        "JWTs, auth headers, URLs with credentials, password key=value, "
+                        "emails, home directory paths) with <REDACTED:type> markers. "
+                        "Use this before sharing a proposal with someone else.")
     args = p.parse_args()
 
     forge_dir = Path(args.forge_dir)
@@ -286,6 +291,13 @@ def main():
 
     proposal = build_proposal(forge_dir, target, agent_name, since)
 
+    # Privacy: scan the rendered proposal for likely secrets. Always warn the
+    # user via a header block when found; redact in-place only when --redact
+    # is passed. The default keeps the source quotes intact (the user may
+    # need to see the actual content) but the warning ensures they don't
+    # paste blindly.
+    proposal = _apply_secret_policy(proposal, redact_in_place=args.redact)
+
     out_path = Path(args.out) if args.out else (
         forge_dir / "proposals" / f"{datetime.now(timezone.utc).strftime('%Y-%m-%dT%H-%M-%SZ')}.md"
     )
@@ -296,6 +308,50 @@ def main():
     # to see. The stdout contract (`out_path`) is preserved for run.py.
     _print_summary(forge_dir, out_path, target, since)
     print(out_path)
+
+
+def _apply_secret_policy(proposal: str, redact_in_place: bool) -> str:
+    """Scan the proposal for secrets, warn at the top if found, optionally
+    redact the secrets in-place."""
+    sys.path.insert(0, str(Path(__file__).resolve().parent))
+    from redact import find_secrets, redact, secrets_summary  # noqa: E402
+
+    matches = find_secrets(proposal)
+    if not matches:
+        return proposal
+
+    summary = secrets_summary(proposal)
+    if redact_in_place:
+        proposal = redact(proposal, mode="tag")
+        warning = (
+            f"> ⚠ **Secrets detected and redacted.** This proposal contained "
+            f"text matching: {summary}. Each match has been replaced with "
+            f"`<REDACTED:type>`. Review the underlying transcripts (or rerun "
+            f"without `--redact`) if you need the originals.\n\n"
+        )
+    else:
+        warning = (
+            f"> ⚠ **This proposal contains text that looks like potential "
+            f"secrets.** Detected: {summary}. The values are kept verbatim so "
+            f"you can verify them, but do not paste blindly into "
+            f"`CLAUDE.md` / `AGENTS.md`. Re-run with `--redact` to replace "
+            f"each match with a `<REDACTED:type>` marker.\n\n"
+        )
+
+    # Print to stderr too so the friendly summary surfaces it without the
+    # user having to open the proposal file.
+    print(f"\n  ⚠ secrets detected in proposal: {summary}", file=sys.stderr)
+    if not redact_in_place:
+        print(f"    re-run with --redact to replace them with placeholders\n",
+              file=sys.stderr)
+
+    # Inject the warning right after the H1 title.
+    if proposal.startswith("# "):
+        nl = proposal.find("\n")
+        head = proposal[:nl + 1]
+        rest = proposal[nl + 1:]
+        return head + "\n" + warning + rest
+    return warning + proposal
 
 
 def _print_summary(forge_dir: Path, out_path: Path, target: str, since) -> None:

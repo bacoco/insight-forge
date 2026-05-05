@@ -157,6 +157,9 @@ def main():
                    help="Codex: skip sessions modified within N seconds (default: 60).")
     p.add_argument("--claude-home", default=None, help="Override ~/.claude location.")
     p.add_argument("--codex-home", default=None, help="Override ~/.codex location.")
+    p.add_argument("--redact", action="store_true",
+                   help="Redact likely secrets in the proposal (forwarded to "
+                        "propose_claude_md.py). Use before sharing a proposal.")
     args = p.parse_args()
 
     project = str(Path(args.project).resolve())
@@ -246,6 +249,8 @@ def main():
     if since:
         # Pass date-only portion so proposal filters to new knowledge
         proposal_cmd += ["--since", since[:10]]
+    if args.redact:
+        proposal_cmd.append("--redact")
     result = subprocess.run(proposal_cmd, stdout=subprocess.PIPE, text=True)
     proposal_path = (result.stdout or "").strip()
     if result.returncode != 0:
