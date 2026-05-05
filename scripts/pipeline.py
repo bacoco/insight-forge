@@ -188,6 +188,14 @@ def yaml_load_simple(text: str) -> dict:
             container = stack[-1][1] if stack else result
             # Parse the rest as a key:value
             rest = stripped[2:]
+            # Bare scalar list item (e.g. "- a3"): no key:value structure.
+            # Without this branch, scalar lists round-trip through the lite
+            # parser as empty lists — silent data loss.
+            if ":" not in rest:
+                if isinstance(container, list):
+                    container.append(_parse_scalar(rest.strip()))
+                i += 1
+                continue
             if ":" in rest:
                 k, _, v = rest.partition(":")
                 k, v = k.strip(), v.strip()
@@ -593,18 +601,24 @@ def classify_and_route(ev: CandidateEvent) -> Optional[RoutedEvent]:
                 },
             )
 
-    # Tool error → potential dead_end if not recovered next
+    # Tool error → potential dead_end if not recovered next.
+    # Use the actual error text as `distilled` so the evidence-bundle trigger
+    # quote is verbatim-traceable to the transcript (the validator's --source
+    # check fails otherwise — there's no "Tool failed: Bash" string in any
+    # session). Falls back to the synthesized title only when content is empty.
     if ev.role == "tool_result" and ev.tool_status == "error":
+        distilled_text = content[:300] if content.strip() else f"Tool failed: {ev.tool_name or '?'}"
         return RoutedEvent(
             candidate=ev,
             route="staged",
             type_="dead_end",
             provenance="ai-executed",
             confidence="medium",
-            distilled=f"Tool failed: {ev.tool_name or '?'}",
+            distilled=distilled_text,
             extra={
                 "failure_mode": content[:300],
                 "could_have_worked_if": "not_explored",
+                "tool_name": ev.tool_name or "",
             },
         )
 

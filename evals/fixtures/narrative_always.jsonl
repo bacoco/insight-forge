@@ -1,0 +1,4 @@
+{"_marker": "session_start", "session_id": "narr0001-0000-0000-0000-000000000011", "session_short": "narr0001", "agent": "claude", "mtime": "2026-05-02T14:00:00", "size_kb": 2}
+{"role": "user", "content": "I always thought this regex was weird, but anyway — let's just move on and refactor the parser.", "timestamp": "2026-05-02T14:00:05", "session_id": "narr0001-0000-0000-0000-000000000011", "session_short": "narr0001", "agent": "claude"}
+{"role": "assistant", "content": "Understood. Refactoring the parser now.", "timestamp": "2026-05-02T14:00:10", "session_id": "narr0001-0000-0000-0000-000000000011", "session_short": "narr0001", "agent": "claude"}
+{"_marker": "session_end"}

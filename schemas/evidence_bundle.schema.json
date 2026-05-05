@@ -1,0 +1,99 @@
+{
+  "$schema": "http://json-schema.org/draft-07/schema#",
+  "$id": "https://github.com/bacoco/insight-forge/blob/main/schemas/evidence_bundle.schema.json",
+  "title": "Insight Forge — evidence bundle",
+  "description": "Machine-readable provenance for one crystallized entry in .insight-forge/logic/. The contract is: every promoted heuristic / claim / dead_end / constraint / concept must be backed by a YAML file at .insight-forge/evidence/bundles/<entry_id>.yaml that conforms to this schema. The trigger event quote MUST be a substring of the source transcript — that's what makes 'every suggestion cites your transcripts' verifiable instead of a slogan.",
+  "type": "object",
+  "required": ["entry_id", "target_layer", "crystallized_via", "evidence", "from_staging"],
+  "additionalProperties": true,
+  "properties": {
+    "entry_id": {
+      "type": "string",
+      "description": "Stable identifier matching the heading in logic/<layer>.md (e.g. H01, C03, D02).",
+      "pattern": "^[A-Z][0-9]+$"
+    },
+    "target_layer": {
+      "type": "string",
+      "enum": ["heuristic", "claim", "dead_end", "constraint", "concept"]
+    },
+    "crystallized_via": {
+      "type": "string",
+      "enum": ["verbal-affirmation", "empirical-resolution", "topic-abandonment", "artifact-commitment"]
+    },
+    "created_at": {
+      "type": "string",
+      "format": "date-time"
+    },
+    "from_staging": {
+      "type": "string",
+      "description": "ID of the staged observation this entry was promoted from (e.g. O01)."
+    },
+    "sessions": {
+      "type": "array",
+      "items": {"type": "string"},
+      "description": "Short session IDs that contributed evidence."
+    },
+    "evidence": {
+      "type": "array",
+      "minItems": 1,
+      "description": "List of evidence events. Must contain exactly one trigger event and zero or more closure events.",
+      "items": {
+        "type": "object",
+        "required": ["kind"],
+        "additionalProperties": true,
+        "properties": {
+          "kind": {
+            "type": "string",
+            "enum": ["trigger", "verbal-affirmation", "empirical-resolution", "topic-abandonment", "artifact-commitment"]
+          },
+          "role": {
+            "type": "string",
+            "enum": ["user", "assistant", "tool_use", "tool_result", "system"]
+          },
+          "timestamp": {"type": "string"},
+          "session_id": {"type": "string"},
+          "quote": {
+            "type": "string",
+            "description": "Verbatim text from the transcript. Must be findable as a substring of the source JSONL when the validator's --source flag is used."
+          },
+          "tool": {"type": "string"},
+          "tool_status": {"type": "string"},
+          "note": {"type": "string"}
+        }
+      }
+    },
+    "counter_evidence": {
+      "type": "object",
+      "description": "Devil's Advocate clause — what would refute or limit this entry.",
+      "required": ["text"],
+      "properties": {
+        "text": {"type": "string"},
+        "source": {
+          "type": "string",
+          "enum": ["deterministic-template", "council-verified", "llm-generated", "manual"]
+        }
+      }
+    },
+    "promotion_gate": {
+      "type": "object",
+      "properties": {
+        "passed": {"type": "boolean"},
+        "reason": {"type": "string"}
+      }
+    }
+  },
+  "allOf": [
+    {
+      "description": "Bundle must contain exactly one event of kind=trigger.",
+      "properties": {
+        "evidence": {
+          "contains": {
+            "type": "object",
+            "properties": {"kind": {"const": "trigger"}},
+            "required": ["kind"]
+          }
+        }
+      }
+    }
+  ]
+}

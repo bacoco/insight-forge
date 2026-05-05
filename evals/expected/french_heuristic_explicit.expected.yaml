@@ -1,0 +1,21 @@
+# French heuristic with leading "Toujours" — DOES crystallize via
+# R-HEURISTIC-ALWAYS-NEVER (which already has "toujours" in its alternation),
+# closure signal = verbal-affirmation ("exact, c'est ça la règle").
+crystallized:
+  total: 1
+  by_layer:
+    heuristic: 1
+    claim: 0
+    dead_end: 0
+    constraint: 0
+    concept: 0
+staged_only: 0
+expected_signals:
+  - verbal-affirmation
+must_have_evidence_bundle: true
+must_have_counter_evidence: true
+notes: |
+  Brief case: "règle projet explicite FR doit cristalliser". Distinct from
+  french_heuristic (the known gap where "Il faut toujours" leads — needs the
+  proposer to extend the regex). Here the message correctly starts with the
+  pattern the rule already matches.

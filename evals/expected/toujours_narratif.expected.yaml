@@ -1,0 +1,20 @@
+# French parallel of narrative_always: "J'ai toujours trouvé X, mais bref" —
+# narrative use of "toujours", NOT a project rule. The start-anchor on
+# R-HEURISTIC-ALWAYS-NEVER (the message starts with "J'ai", not "toujours")
+# is what protects against this in French.
+crystallized:
+  total: 0
+  by_layer:
+    heuristic: 0
+    claim: 0
+    dead_end: 0
+    constraint: 0
+    concept: 0
+staged_only: 0
+expected_signals: []
+must_have_evidence_bundle: false
+must_have_counter_evidence: false
+notes: |
+  Brief case: "toujours narratif ne doit pas devenir heuristic". Same
+  protection mechanism as narrative_always but in French — the regex
+  start-anchor only fires when the imperative pattern leads the message.

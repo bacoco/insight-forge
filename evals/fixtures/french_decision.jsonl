@@ -1,0 +1,4 @@
+{"_marker": "session_start", "session_id": "frde0001-0000-0000-0000-000000000015", "session_short": "frde0001", "agent": "claude", "mtime": "2026-05-02T18:00:00", "size_kb": 3}
+{"role": "user", "content": "On part sur pnpm, c'est ça la règle pour ce repo. Plus jamais npm.", "timestamp": "2026-05-02T18:00:05", "session_id": "frde0001-0000-0000-0000-000000000015", "session_short": "frde0001", "agent": "claude"}
+{"role": "assistant", "content": "Compris.", "timestamp": "2026-05-02T18:00:10", "session_id": "frde0001-0000-0000-0000-000000000015", "session_short": "frde0001", "agent": "claude"}
+{"_marker": "session_end"}

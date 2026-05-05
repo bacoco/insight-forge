@@ -1,0 +1,18 @@
+# Python
+__pycache__/
+*.py[cod]
+*.egg-info/
+.pytest_cache/
+.venv/
+venv/
+.env
+
+# Editor
+.idea/
+.vscode/
+*.swp
+.DS_Store
+
+# Local insight-forge state — users generate this per-project.
+# The directory itself ships nothing tracked by default.
+.insight-forge/

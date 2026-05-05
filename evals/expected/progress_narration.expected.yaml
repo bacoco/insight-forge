@@ -1,0 +1,19 @@
+# Assistant message that LOOKS like a falsifiable claim ("they fail when X")
+# but is actually progress narration starting with "I'm checking...".
+# The META_WORK_PREFIXES filter on R-CLAIM-ASSISTANT must skip this.
+crystallized:
+  total: 0
+  by_layer:
+    heuristic: 0
+    claim: 0
+    dead_end: 0
+    constraint: 0
+    concept: 0
+staged_only: 0
+expected_signals: []
+must_have_evidence_bundle: false
+must_have_counter_evidence: false
+notes: |
+  Brief P0 case: "Assistant progress narration ne doit pas devenir claim".
+  The body has the exact "fail when" pattern that R-CLAIM-ASSISTANT keys on,
+  but the leading "I'm checking" disqualifies it via the meta-work filter.

@@ -1,0 +1,54 @@
+[build-system]
+requires = ["setuptools>=68", "wheel"]
+build-backend = "setuptools.build_meta"
+
+[project]
+name = "insight-forge"
+version = "0.1.0"
+description = "Cross-session ARA-style learner for Claude Code & Codex CLI — extracts typed events from JSONL transcripts, maintains a structured knowledge base, proposes CLAUDE.md / AGENTS.md diffs."
+readme = "README.md"
+requires-python = ">=3.10"
+license = {text = "MIT"}
+authors = [{name = "Insight Forge contributors"}]
+keywords = ["claude-code", "codex-cli", "ara", "knowledge-base", "agent-memory", "harness"]
+classifiers = [
+  "Development Status :: 3 - Alpha",
+  "Intended Audience :: Developers",
+  "License :: OSI Approved :: MIT License",
+  "Programming Language :: Python :: 3.10",
+  "Programming Language :: Python :: 3.11",
+  "Programming Language :: Python :: 3.12",
+  "Topic :: Software Development",
+  "Operating System :: OS Independent",
+]
+dependencies = [
+  # No hard runtime dependencies. PyYAML is optional — there is a built-in
+  # lite parser used as fallback (covered by tests/test_yaml_loader.py).
+]
+
+[project.optional-dependencies]
+# Install with: pip install -e ".[dev]"
+# Includes everything CI runs: pyyaml for the fast path, pytest for unit
+# tests, jsonschema for the evidence-bundle validator.
+dev = [
+  "pyyaml>=6.0",
+  "pytest>=7.0",
+  "jsonschema>=4.0",
+]
+
+[project.urls]
+Homepage = "https://github.com/bacoco/insight-forge"
+Issues = "https://github.com/bacoco/insight-forge/issues"
+Documentation = "https://github.com/bacoco/insight-forge/blob/main/docs/how-it-works.md"
+
+[tool.setuptools]
+# Script-oriented project — no python package to ship via setuptools.
+# `pip install -e .` makes the dev workflow ergonomic without forcing a
+# package layout on the codebase.
+py-modules = []
+packages = []
+
+[tool.pytest.ini_options]
+testpaths = ["tests"]
+python_files = ["test_*.py"]
+addopts = "-q"

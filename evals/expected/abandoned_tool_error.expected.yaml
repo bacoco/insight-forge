@@ -1,0 +1,22 @@
+# Tool error in session 1 followed by 5 sessions of completely different
+# work (UI tweaks). Topic-abandonment requires the failure-related keywords
+# (legacy, migration, converter, permissions) to be absent from the next
+# k=5 sessions — they are. Promotes the staged dead_end via topic-abandonment.
+crystallized:
+  total: 1
+  by_layer:
+    heuristic: 0
+    claim: 0
+    dead_end: 1
+    constraint: 0
+    concept: 0
+staged_only: 0
+expected_signals:
+  - topic-abandonment
+must_have_evidence_bundle: true
+must_have_counter_evidence: true
+notes: |
+  Brief case: "tool error abandonné = dead_end". Symmetric to abandoned_topic
+  but for the dead_end layer. Tests that the maturity tracker promotes a
+  staged dead_end (from R-TOOLERROR) when keyword-overlap-free silence
+  follows. Counter-evidence comes from the deterministic template.
