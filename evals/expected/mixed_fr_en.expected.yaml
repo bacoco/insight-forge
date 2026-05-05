@@ -1,0 +1,20 @@
+# Mixed French/English session: heuristic stated in EN ("Always use..."),
+# explanation in FR, affirmation mixes both ("yes parfait, on part sur ça").
+# Should crystallize the same way a pure-EN or pure-FR session would.
+crystallized:
+  total: 1
+  by_layer:
+    heuristic: 1
+    claim: 0
+    dead_end: 0
+    constraint: 0
+    concept: 0
+staged_only: 0
+expected_signals:
+  - verbal-affirmation
+must_have_evidence_bundle: true
+must_have_counter_evidence: true
+notes: |
+  Brief case: "mixed FR/EN transcript". AFFIRMATION_PHRASES contains both
+  "yes" and "parfait" — verbal-affirmation must fire. The heuristic regex
+  is anchored on "Always" so language-mixing in the body doesn't matter.

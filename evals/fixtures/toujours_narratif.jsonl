@@ -1,0 +1,4 @@
+{"_marker": "session_start", "session_id": "tjnar001-0000-0000-0000-000000000016", "session_short": "tjnar001", "agent": "claude", "mtime": "2026-05-02T19:00:00", "size_kb": 2}
+{"role": "user", "content": "J'ai toujours trouvé ce module bizarre, mais bref — refactore-le avec la nouvelle API.", "timestamp": "2026-05-02T19:00:05", "session_id": "tjnar001-0000-0000-0000-000000000016", "session_short": "tjnar001", "agent": "claude"}
+{"role": "assistant", "content": "Compris, je refactore.", "timestamp": "2026-05-02T19:00:10", "session_id": "tjnar001-0000-0000-0000-000000000016", "session_short": "tjnar001", "agent": "claude"}
+{"_marker": "session_end"}

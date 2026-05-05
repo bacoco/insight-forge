@@ -1,0 +1,5 @@
+{"_marker": "session_start", "session_id": "frhe0001-0000-0000-0000-000000000017", "session_short": "frhe0001", "agent": "claude", "mtime": "2026-05-02T20:00:00", "size_kb": 3}
+{"role": "user", "content": "Toujours utiliser ruff pour le lint dans ce repo, jamais flake8.", "timestamp": "2026-05-02T20:00:05", "session_id": "frhe0001-0000-0000-0000-000000000017", "session_short": "frhe0001", "agent": "claude"}
+{"role": "assistant", "content": "Compris, ruff sera l'unique outil de lint.", "timestamp": "2026-05-02T20:00:10", "session_id": "frhe0001-0000-0000-0000-000000000017", "session_short": "frhe0001", "agent": "claude"}
+{"role": "user", "content": "exact, c'est ça la règle", "timestamp": "2026-05-02T20:00:20", "session_id": "frhe0001-0000-0000-0000-000000000017", "session_short": "frhe0001", "agent": "claude"}
+{"_marker": "session_end"}

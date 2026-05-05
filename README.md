@@ -130,6 +130,28 @@ eval harness:
 [`harness/README.md`](harness/README.md),
 [`evals/README.md`](evals/README.md).
 
+### Quality gates
+
+Every change runs against four executable contracts. CI ([.github/workflows/evals.yml](.github/workflows/evals.yml)) gates them on every push and pull request:
+
+```bash
+pip install -e ".[dev]"
+
+# 1. Regression evals — 15 fixtures + 1 known gap, false_promotion_rate must stay at 0%
+python3 scripts/run_evals.py
+
+# 2. Harness contracts — every rule's must_fire_on / must_not_fire_on must hold
+python3 scripts/run_evals.py --verify-contracts
+
+# 3. Unit tests — YAML fallback, harness predicates, evidence schema, contracts
+pytest
+
+# 4. Evidence bundles — schema valid AND every quote traceable to its source transcript
+python3 scripts/validate_evidence.py --evals
+```
+
+The fourth gate is the one that makes *"every suggestion cites your transcripts"* executable, not a slogan: a bundle with an invented quote fails the build.
+
 ---
 
 ## Incremental by design

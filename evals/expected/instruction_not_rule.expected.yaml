@@ -1,0 +1,19 @@
+# A user task instruction in French that contains "il faut" — must NOT
+# crystallize as a project constraint. Brief P0 case: "instruction utilisateur
+# qui ne doit pas devenir règle projet".
+crystallized:
+  total: 0
+  by_layer:
+    heuristic: 0
+    claim: 0
+    dead_end: 0
+    constraint: 0
+    concept: 0
+staged_only: 0
+expected_signals: []
+must_have_evidence_bundle: false
+must_have_counter_evidence: false
+notes: |
+  Task imperative ("Mets à jour le README..."). The constraint classifier's
+  imperative-opener filter must reject this even though the message contains
+  "il faut" — same protection pattern as issue #13, applied to French.

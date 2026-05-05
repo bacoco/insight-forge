@@ -1,0 +1,5 @@
+{"_marker": "session_start", "session_id": "mxfren01-0000-0000-0000-000000000018", "session_short": "mxfren01", "agent": "claude", "mtime": "2026-05-02T21:00:00", "size_kb": 3}
+{"role": "user", "content": "Always use the api/ prefix for new endpoints. C'est important pour la cohérence.", "timestamp": "2026-05-02T21:00:05", "session_id": "mxfren01-0000-0000-0000-000000000018", "session_short": "mxfren01", "agent": "claude"}
+{"role": "assistant", "content": "OK, j'utiliserai le prefix api/ pour tout nouvel endpoint.", "timestamp": "2026-05-02T21:00:10", "session_id": "mxfren01-0000-0000-0000-000000000018", "session_short": "mxfren01", "agent": "claude"}
+{"role": "user", "content": "yes parfait, on part sur ça", "timestamp": "2026-05-02T21:00:20", "session_id": "mxfren01-0000-0000-0000-000000000018", "session_short": "mxfren01", "agent": "claude"}
+{"_marker": "session_end"}

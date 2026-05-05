@@ -1,0 +1,46 @@
+name: evals
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+
+# This workflow only triggers on push/PR events and uses no untrusted user
+# input (no github.event.issue.*, head_ref, comment.body, etc). All ${{ }}
+# expressions reference matrix variables which are safe by design.
+
+jobs:
+  evals:
+    runs-on: ubuntu-latest
+    strategy:
+      matrix:
+        python-version: ["3.10", "3.11", "3.12"]
+      fail-fast: false
+
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Set up Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: ${{ matrix.python-version }}
+
+      - name: Install runtime + dev deps
+        run: |
+          python -m pip install --upgrade pip
+          pip install pyyaml pytest jsonschema
+
+      - name: Regression evals
+        run: python3 scripts/run_evals.py
+
+      - name: Verify harness contracts
+        run: python3 scripts/run_evals.py --verify-contracts
+
+      - name: Proposer dry-run
+        run: python3 scripts/propose_rules.py --dry-run
+
+      - name: Unit tests
+        run: python3 -m pytest tests/ -v
+
+      - name: Validate evidence bundle schema
+        run: python3 scripts/validate_evidence.py --evals

@@ -1,0 +1,4 @@
+{"_marker": "session_start", "session_id": "inr00001-0000-0000-0000-000000000010", "session_short": "inr00001", "agent": "claude", "mtime": "2026-05-02T13:00:00", "size_kb": 3}
+{"role": "user", "content": "Mets à jour le README et il faut que tu expliques mieux le setup, parce que les nouveaux contributeurs galèrent. Vérifie aussi que le diagramme est lisible.", "timestamp": "2026-05-02T13:00:05", "session_id": "inr00001-0000-0000-0000-000000000010", "session_short": "inr00001", "agent": "claude"}
+{"role": "assistant", "content": "OK je m'en occupe.", "timestamp": "2026-05-02T13:00:10", "session_id": "inr00001-0000-0000-0000-000000000010", "session_short": "inr00001", "agent": "claude"}
+{"_marker": "session_end"}
