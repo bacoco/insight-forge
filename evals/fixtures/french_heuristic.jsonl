@@ -1,0 +1,5 @@
+{"_marker": "session_start", "session_id": "fr011aa-0000-0000-0000-00000000fr01", "session_short": "fr011aa1", "agent": "claude", "mtime": "2026-05-02T10:00:00", "size_kb": 4}
+{"role": "user", "content": "Il faut toujours utiliser supabase pour les requêtes auth de ce projet.", "timestamp": "2026-05-02T10:00:05", "session_id": "fr011aa-0000-0000-0000-00000000fr01", "session_short": "fr011aa1", "agent": "claude"}
+{"role": "assistant", "content": "Compris — j'utiliserai supabase pour toutes les requêtes auth.", "timestamp": "2026-05-02T10:00:10", "session_id": "fr011aa-0000-0000-0000-00000000fr01", "session_short": "fr011aa1", "agent": "claude"}
+{"role": "user", "content": "oui parfait, on part sur ça.", "timestamp": "2026-05-02T10:00:20", "session_id": "fr011aa-0000-0000-0000-00000000fr01", "session_short": "fr011aa1", "agent": "claude"}
+{"_marker": "session_end"}

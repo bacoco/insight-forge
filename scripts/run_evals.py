@@ -18,6 +18,7 @@ from __future__ import annotations
 
 import argparse
 import json
+import os
 import shutil
 import subprocess
 import sys
@@ -56,12 +57,15 @@ def load_yaml(path: Path) -> dict:
 # Pipeline runner — fresh forge dir per fixture, no contamination across runs
 # ---------------------------------------------------------------------------
 
-def run_pipeline_on_fixture(fixture: Path) -> Path:
+def run_pipeline_on_fixture(fixture: Path, rules_path: Path = None) -> Path:
     forge_dir = Path(tempfile.mkdtemp(prefix=f"forge-eval-{fixture.stem}-"))
     cmd = [sys.executable, str(PIPELINE_SCRIPT),
            "--input", str(fixture),
            "--forge-dir", str(forge_dir)]
-    result = subprocess.run(cmd, capture_output=True, text=True)
+    env = os.environ.copy()
+    if rules_path:
+        env["INSIGHT_FORGE_RULES_PATH"] = str(rules_path)
+    result = subprocess.run(cmd, capture_output=True, text=True, env=env)
     if result.returncode != 0:
         sys.stderr.write(result.stderr)
         raise SystemExit(f"pipeline.py failed on {fixture.name} (exit {result.returncode})")
@@ -321,10 +325,18 @@ def main():
                    help="Don't delete the temporary forge directories on exit.")
     p.add_argument("--verify-contracts", action="store_true",
                    help="Verify each rule's must_fire_on/must_not_fire_on contracts.")
+    p.add_argument("--rules-path", default=None,
+                   help="Override harness/rules.yaml — used by the proposer to "
+                        "evaluate candidate edits in a sandbox.")
+    p.add_argument("--include-gaps", action="store_true",
+                   help="Include known-gap fixtures in the regression count "
+                        "(default: skip them; gaps are exercised by propose_rules.py).")
     args = p.parse_args()
 
     if args.verify_contracts:
         sys.exit(0 if verify_rule_contracts() == 0 else 1)
+
+    rules_path = Path(args.rules_path) if args.rules_path else None
 
     fixtures = sorted(FIXTURES_DIR.glob("*.jsonl"))
     if args.fixture:
@@ -335,13 +347,14 @@ def main():
     results = []
     expecteds = []
     tmp_dirs = []
+    gap_results = []
     for fixture in fixtures:
         expected_path = EXPECTED_DIR / f"{fixture.stem}.expected.yaml"
         if not expected_path.exists():
             sys.stderr.write(f"[evals] No expected for {fixture.name} — skipping\n")
             continue
         expected = load_yaml(expected_path)
-        forge_dir = run_pipeline_on_fixture(fixture)
+        forge_dir = run_pipeline_on_fixture(fixture, rules_path=rules_path)
         tmp_dirs.append(forge_dir)
         actual = count_crystallized(forge_dir)
         actual_signals = collect_signals(forge_dir)
@@ -349,11 +362,17 @@ def main():
         counter_ok = all_have_counter_evidence(forge_dir)
         result = compare(fixture.stem, expected, actual, actual_signals,
                           has_bundles, counter_ok)
+        # Known gaps are tracked separately so the proposer can target them
+        # without flipping main red.
+        if expected.get("known_gap") and not args.include_gaps:
+            result["gap"] = True
+            gap_results.append(result)
+            continue
         results.append(result)
         expecteds.append(expected)
 
     metrics = aggregate_metrics(results, expecteds)
-    summary = {"results": results, "metrics": metrics}
+    summary = {"results": results, "metrics": metrics, "gaps": gap_results}
 
     if args.json:
         print(json.dumps(summary, indent=2))
@@ -363,8 +382,15 @@ def main():
             print(f"  [{mark}] {r['fixture']:<32} signals={r['actual_signals']}")
             for d in r["diffs"]:
                 print(f"         · {d}")
+        for r in gap_results:
+            mark = "GAP " if not r["passed"] else "GAP*"  # GAP* = unexpectedly passing
+            print(f"  [{mark}] {r['fixture']:<32} signals={r['actual_signals']}")
+            for d in r["diffs"]:
+                print(f"         · {d}")
         print()
-        print(f"  fixtures: {metrics.get('passed', 0)}/{metrics.get('fixtures_run', 0)} passed")
+        print(f"  fixtures: {metrics.get('passed', 0)}/{metrics.get('fixtures_run', 0)} passed"
+              + (f"  ({len(gap_results)} known gap{'s' if len(gap_results) != 1 else ''})"
+                 if gap_results else ""))
         print(f"  false_promotion_rate:  {metrics.get('false_promotion_rate', 0):.2%}")
         print(f"  missed_promotion_rate: {metrics.get('missed_promotion_rate', 0):.2%}")
         print(f"  provenance_coverage:   {metrics.get('provenance_coverage', 0):.2%}")
