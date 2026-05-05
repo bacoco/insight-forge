@@ -123,8 +123,12 @@ Proposals are organized by epistemic confidence:
 - **Regression-tested.** A suite of synthetic transcripts asserts what should and shouldn't crystallize. Pipeline changes that would let an over-confident rule slip through fail the build.
 - **Never auto-edits anything.** insight-forge writes to `.insight-forge/proposals/`. Your `CLAUDE.md` only changes when you decide to copy something into it.
 
-How it's built — pipeline, classifier rules, eval harness, contributor guide:
-[`TECHNICAL.md`](TECHNICAL.md), [`harness/README.md`](harness/README.md), [`evals/README.md`](evals/README.md).
+How it's built — algorithm walkthrough, pipeline internals, classifier rules,
+eval harness:
+[`docs/how-it-works.md`](docs/how-it-works.md),
+[`TECHNICAL.md`](TECHNICAL.md),
+[`harness/README.md`](harness/README.md),
+[`evals/README.md`](evals/README.md).
 
 ---
 
