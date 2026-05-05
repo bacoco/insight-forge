@@ -227,6 +227,90 @@ def aggregate_metrics(results: list[dict], expecteds: list[dict]) -> dict:
 # Main
 # ---------------------------------------------------------------------------
 
+def verify_rule_contracts() -> int:
+    """Check each rule's must_fire_on / must_not_fire_on claims against fixtures.
+
+    Loads harness/rules.yaml, runs every fixture through the rule engine, and
+    asserts that each rule's contract holds. Returns the number of contract
+    violations (0 = clean).
+    """
+    sys.path.insert(0, str(REPO_ROOT))
+    from harness.loader import load_rules, classify_with_rules  # noqa: E402
+
+    sys.path.insert(0, str(REPO_ROOT / "scripts"))
+    from pipeline import CandidateEvent  # noqa: E402
+
+    ruleset = load_rules()
+    violations = 0
+
+    # Build {fixture_stem: [CandidateEvent, ...]} once.
+    fixture_events: dict[str, list] = {}
+    for fixture in sorted(FIXTURES_DIR.glob("*.jsonl")):
+        events = []
+        for line in fixture.read_text(encoding="utf-8").splitlines():
+            line = line.strip()
+            if not line:
+                continue
+            try:
+                obj = json.loads(line)
+            except json.JSONDecodeError:
+                continue
+            if obj.get("_marker"):
+                continue
+            events.append(CandidateEvent(
+                session_id=obj.get("session_id", ""),
+                session_short=obj.get("session_short", ""),
+                agent=obj.get("agent", ""),
+                timestamp=obj.get("timestamp", ""),
+                role=obj.get("role", ""),
+                content=obj.get("content", ""),
+                tool_name=obj.get("tool_name"),
+                tool_status=obj.get("tool_status"),
+            ))
+        fixture_events[fixture.stem] = events
+
+    print("[contracts] verifying rule.contract.must_fire_on / must_not_fire_on")
+    for rule in ruleset.rules:
+        contract = rule.contract or {}
+        must_fire = contract.get("must_fire_on", []) or []
+        must_not_fire = contract.get("must_not_fire_on", []) or []
+
+        for fixture_stem in must_fire:
+            events = fixture_events.get(fixture_stem, [])
+            fired = any(_rule_fires(rule, ev, ruleset) for ev in events)
+            if not fired:
+                print(f"  ✗ {rule.id}: must_fire_on={fixture_stem} but no event matched")
+                violations += 1
+            else:
+                print(f"  ✓ {rule.id}: fires on {fixture_stem}")
+
+        for fixture_stem in must_not_fire:
+            events = fixture_events.get(fixture_stem, [])
+            fired = any(_rule_fires(rule, ev, ruleset) for ev in events)
+            if fired:
+                print(f"  ✗ {rule.id}: must_not_fire_on={fixture_stem} but matched an event")
+                violations += 1
+            else:
+                print(f"  ✓ {rule.id}: silent on {fixture_stem}")
+
+    print()
+    if violations:
+        print(f"  {violations} contract violation(s)")
+    else:
+        print("  all rule contracts hold")
+    return violations
+
+
+def _rule_fires(rule, ev, ruleset) -> bool:
+    """Check whether a single rule fires on a single event (without priority)."""
+    from harness.loader import _matches  # noqa: E402
+    if not _matches(rule.when, ev, ruleset):
+        return False
+    if rule.unless and _matches(rule.unless, ev, ruleset):
+        return False
+    return True
+
+
 def main():
     p = argparse.ArgumentParser(description="Run insight-forge regression evals.")
     p.add_argument("--fixture", default=None,
@@ -235,7 +319,12 @@ def main():
                    help="Emit machine-readable JSON on stdout.")
     p.add_argument("--keep-tmp", action="store_true",
                    help="Don't delete the temporary forge directories on exit.")
+    p.add_argument("--verify-contracts", action="store_true",
+                   help="Verify each rule's must_fire_on/must_not_fire_on contracts.")
     args = p.parse_args()
+
+    if args.verify_contracts:
+        sys.exit(0 if verify_rule_contracts() == 0 else 1)
 
     fixtures = sorted(FIXTURES_DIR.glob("*.jsonl"))
     if args.fixture:
