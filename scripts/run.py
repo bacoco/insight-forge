@@ -70,6 +70,24 @@ def detect_agents(claude_home: Path, codex_home: Path) -> list[str]:
     return found
 
 
+def _print_no_sessions_help(claude_home: Path, codex_home: Path) -> None:
+    """Print actionable empty-state guidance instead of a bare error."""
+    sys.stderr.write("\n")
+    sys.stderr.write("  Insight Forge couldn't find any AI coding sessions on this machine.\n\n")
+    sys.stderr.write("  insight-forge analyzes the JSONL transcripts your AI assistant writes\n")
+    sys.stderr.write("  while you work. It looks in two places:\n\n")
+    sys.stderr.write(f"    Claude Code: {claude_home}/projects/\n")
+    sys.stderr.write(f"    Codex CLI:   {codex_home}/sessions/\n\n")
+    sys.stderr.write("  Neither directory exists yet on this machine.\n\n")
+    sys.stderr.write("  What to do next:\n")
+    sys.stderr.write("    1. Use Claude Code or Codex CLI for a few minutes in any project.\n")
+    sys.stderr.write("       Sessions are saved automatically as you go.\n")
+    sys.stderr.write("    2. Re-run insight-forge from inside that project's directory.\n\n")
+    sys.stderr.write("  Already used your AI here but still seeing this? Try:\n")
+    sys.stderr.write("    python3 scripts/run.py --fuzzy-cwd\n\n")
+    sys.stderr.write("  (matches sessions whose recorded cwd is a parent or child of yours.)\n\n")
+
+
 def extract(agent: str, project: str, since: str | None,
             out: Path, args: argparse.Namespace) -> bool:
     """Call the right extractor. Returns True if it produced output."""
@@ -154,8 +172,7 @@ def main():
     if args.agent == "auto":
         agents = detect_agents(claude_home, codex_home)
         if not agents:
-            print("[insight-forge] No Claude Code or Codex sessions found on this machine.",
-                  file=sys.stderr)
+            _print_no_sessions_help(claude_home, codex_home)
             sys.exit(1)
     else:
         agents = [args.agent]
@@ -185,8 +202,16 @@ def main():
             extracted_parts.append(out)
 
     if not extracted_parts:
-        print("[insight-forge] No new sessions to process since last run. Nothing to do.",
-              file=sys.stderr)
+        sys.stderr.write("\n")
+        if since:
+            sys.stderr.write(f"  No new sessions since {since[:10]}.\n")
+            sys.stderr.write(f"  insight-forge stays incremental — nothing to do until you\n")
+            sys.stderr.write(f"  use your AI assistant again in this project.\n\n")
+        else:
+            sys.stderr.write(f"  No sessions found for this project's directory.\n")
+            sys.stderr.write(f"    Project: {project}\n\n")
+            sys.stderr.write(f"  If you have used your AI from a parent or sibling directory,\n")
+            sys.stderr.write(f"  try:  python3 scripts/run.py --fuzzy-cwd\n\n")
         # Still update .last_run so the cursor advances
         last_run_file = forge_dir / ".last_run"
         now = datetime.now(timezone.utc).isoformat(timespec="seconds")
@@ -214,35 +239,17 @@ def main():
     _run(pipeline_cmd, "Running pipeline (Harvester → Router → Maturity Tracker)…")
 
     # ── Generate proposal ─────────────────────────────────────
+    # Capture stdout (the path) but let stderr flow through so the user
+    # sees the friendly summary printed by propose_claude_md.py.
     proposal_cmd = [sys.executable, str(SCRIPTS / "propose_claude_md.py"),
                     "--forge-dir", str(forge_dir)]
     if since:
         # Pass date-only portion so proposal filters to new knowledge
         proposal_cmd += ["--since", since[:10]]
-    result = subprocess.run(proposal_cmd, capture_output=True, text=True)
-    proposal_path = result.stdout.strip()
-    if result.returncode == 0 and proposal_path:
-        print(f"[insight-forge] Proposal ready: {proposal_path}", file=sys.stderr)
-    else:
+    result = subprocess.run(proposal_cmd, stdout=subprocess.PIPE, text=True)
+    proposal_path = (result.stdout or "").strip()
+    if result.returncode != 0:
         print("[insight-forge] Warning: proposal generation failed", file=sys.stderr)
-        if result.stderr:
-            print(result.stderr, file=sys.stderr)
-
-    # ── Print summary ─────────────────────────────────────────
-    summary_path = forge_dir / "trace" / "pipeline_log.yaml"
-    summary_line = ""
-    if summary_path.exists():
-        lines = summary_path.read_text(encoding="utf-8").splitlines()
-        # Last run entry is at the bottom — grab the key counts
-        for line in reversed(lines):
-            if "candidates:" in line or "crystallized:" in line:
-                summary_line = line.strip()
-                break
-
-    agents_str = " + ".join(agents)
-    print(f"\n[insight-forge] Done ({agents_str}) — {summary_line}", file=sys.stderr)
-    if proposal_path:
-        print(f"[insight-forge] → Review: {proposal_path}", file=sys.stderr)
 
 
 if __name__ == "__main__":
