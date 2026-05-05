@@ -1,0 +1,4 @@
+{"_marker": "session_start", "session_id": "jjjj0000-0000-0000-0000-00000000000a", "session_short": "jjjj0000", "agent": "claude", "mtime": "2026-05-04T09:00:00", "size_kb": 2}
+{"role": "assistant", "content": "Redis is faster than memcached when the working set fits in RAM because of pipelining.", "timestamp": "2026-05-04T09:00:05", "session_id": "jjjj0000-0000-0000-0000-00000000000a", "session_short": "jjjj0000", "agent": "claude"}
+{"role": "user", "content": "ok let's keep going on the migration", "timestamp": "2026-05-04T09:00:10", "session_id": "jjjj0000-0000-0000-0000-00000000000a", "session_short": "jjjj0000", "agent": "claude"}
+{"_marker": "session_end"}

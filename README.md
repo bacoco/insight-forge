@@ -92,11 +92,12 @@ It's expensive. It's the point.
 
 ```
 .insight-forge/
-├── proposals/2026-05-03.md     ← what to add to your CLAUDE.md
-├── logic/claims.md              ← falsifiable assertions + counter-evidence
-├── logic/heuristics.md          ← rules that actually held up
-├── logic/dead_ends.md           ← failures, and what could have rescued them
-└── evidence/sessions.html       ← forensic iMessage-style session viewer
+├── proposals/2026-05-03T14-22-05Z.md   ← what to add to your CLAUDE.md
+├── logic/claims.md                      ← falsifiable assertions + counter-evidence
+├── logic/heuristics.md                  ← rules that actually held up
+├── logic/dead_ends.md                   ← failures, and what could have rescued them
+├── evidence/bundles/H01.yaml            ← machine-readable provenance per entry
+└── evidence/sessions.html               ← forensic iMessage-style session viewer
 ```
 
 Proposals are organized by epistemic confidence:
@@ -104,6 +105,74 @@ Proposals are organized by epistemic confidence:
 - **Ancrage** — copy-paste ready. Multiple signals. Strong counter-evidence on record.
 - **Brouillard** — promising but unresolved. Needs more sessions.
 - **Déni** — contradicts something you already believe. Handle with care.
+
+---
+
+## Every claim is auditable
+
+Markdown is for humans. Evidence bundles are for machines.
+
+Every crystallized entry gets a YAML file at `evidence/bundles/<entry_id>.yaml`
+that names exactly which user phrase, which tool result, or which abandoned topic
+earned its promotion:
+
+```yaml
+entry_id: H01
+target_layer: heuristic
+crystallized_via: verbal-affirmation
+sessions: [aaaa1111]
+evidence:
+  - kind: trigger
+    role: user
+    quote: "Always use pnpm for this repo, never npm."
+  - kind: verbal-affirmation
+    role: user
+    quote: "yes parfait, on part sur pnpm"
+counter_evidence:
+  text: "Doesn't apply when the underlying assumptions break down."
+  source: deterministic-template
+promotion_gate:
+  passed: true
+  reason: "User affirmation phrase: 'yes'"
+```
+
+If a claim ever needs to be challenged, contradicted, or upgraded — the bundle is
+the source of truth. Markdown can't lie when YAML is watching.
+
+---
+
+## Measured, not just felt
+
+insight-forge ships with a regression harness — `evals/` — that runs synthetic
+transcripts through the full pipeline and asserts what *should* and *should not*
+crystallize.
+
+```bash
+python3 scripts/run_evals.py
+```
+
+```
+  [PASS] abandoned_topic            signals=['topic-abandonment']
+  [PASS] empirical_resolution       signals=['empirical-resolution']
+  [PASS] false_positive_instruction signals=[]
+  [PASS] no_signal                  signals=[]
+  [PASS] simple_success             signals=['verbal-affirmation']
+
+  fixtures: 5/5 passed
+  false_promotion_rate:  0.00%
+  missed_promotion_rate: 0.00%
+  provenance_coverage:   100.00%
+```
+
+The load-bearing metric is **`false_promotion_rate`** — anything above 0 % means
+the pipeline crystallized something that shouldn't have. The whole tool exists to
+keep that number at zero.
+
+Add a fixture, write its expected outcome, run the harness. Pipeline changes
+that regress any of the five reference cases fail the build.
+
+See [`evals/README.md`](evals/README.md) for the fixture format and how to add
+your own.
 
 ---
 

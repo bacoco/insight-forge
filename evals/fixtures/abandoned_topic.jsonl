@@ -1,0 +1,18 @@
+{"_marker": "session_start", "session_id": "cccc3333-0000-0000-0000-000000000003", "session_short": "cccc3333", "agent": "claude", "mtime": "2026-04-01T09:00:00", "size_kb": 3}
+{"role": "assistant", "content": "Postgres connection pooling works better than per-request connections when the API runs behind serverless because cold-start cost dominates.", "timestamp": "2026-04-01T09:00:05", "session_id": "cccc3333-0000-0000-0000-000000000003", "session_short": "cccc3333", "agent": "claude"}
+{"_marker": "session_end"}
+{"_marker": "session_start", "session_id": "dddd4444-0000-0000-0000-000000000004", "session_short": "dddd4444", "agent": "claude", "mtime": "2026-04-05T09:00:00", "size_kb": 1}
+{"role": "user", "content": "fix the navbar styling", "timestamp": "2026-04-05T09:00:05", "session_id": "dddd4444-0000-0000-0000-000000000004", "session_short": "dddd4444", "agent": "claude"}
+{"_marker": "session_end"}
+{"_marker": "session_start", "session_id": "eeee5555-0000-0000-0000-000000000005", "session_short": "eeee5555", "agent": "claude", "mtime": "2026-04-10T09:00:00", "size_kb": 1}
+{"role": "user", "content": "add a footer link to the about page", "timestamp": "2026-04-10T09:00:05", "session_id": "eeee5555-0000-0000-0000-000000000005", "session_short": "eeee5555", "agent": "claude"}
+{"_marker": "session_end"}
+{"_marker": "session_start", "session_id": "ffff6666-0000-0000-0000-000000000006", "session_short": "ffff6666", "agent": "claude", "mtime": "2026-04-15T09:00:00", "size_kb": 1}
+{"role": "user", "content": "rename the css class for the hero section", "timestamp": "2026-04-15T09:00:05", "session_id": "ffff6666-0000-0000-0000-000000000006", "session_short": "ffff6666", "agent": "claude"}
+{"_marker": "session_end"}
+{"_marker": "session_start", "session_id": "gggg7777-0000-0000-0000-000000000007", "session_short": "gggg7777", "agent": "claude", "mtime": "2026-04-20T09:00:00", "size_kb": 1}
+{"role": "user", "content": "tweak the button hover color", "timestamp": "2026-04-20T09:00:05", "session_id": "gggg7777-0000-0000-0000-000000000007", "session_short": "gggg7777", "agent": "claude"}
+{"_marker": "session_end"}
+{"_marker": "session_start", "session_id": "hhhh8888-0000-0000-0000-000000000008", "session_short": "hhhh8888", "agent": "claude", "mtime": "2026-04-25T09:00:00", "size_kb": 1}
+{"role": "user", "content": "add a small logo to the sidebar", "timestamp": "2026-04-25T09:00:05", "session_id": "hhhh8888-0000-0000-0000-000000000008", "session_short": "hhhh8888", "agent": "claude"}
+{"_marker": "session_end"}
