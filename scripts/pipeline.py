@@ -35,6 +35,29 @@ try:
 except ImportError:
     _HAS_PYYAML = False
 
+
+# ============================================================
+# Portable rule spec (Tsinghua NLAH / Stanford Meta-Harness)
+# ============================================================
+# Lazy-loaded so importing pipeline.py never fails on rules.yaml errors;
+# rules are only required when classify_and_route() actually runs.
+
+_RULESET_CACHE = None
+
+
+def _get_ruleset():
+    global _RULESET_CACHE
+    if _RULESET_CACHE is None:
+        try:
+            sys.path.insert(0, str(Path(__file__).resolve().parent.parent))
+            from harness.loader import load_rules  # noqa: E402
+            _RULESET_CACHE = load_rules()
+        except Exception as exc:
+            print(f"[insight-forge] Warning: could not load harness/rules.yaml: {exc}",
+                  file=sys.stderr)
+            _RULESET_CACHE = False  # poison value — fall back to hardcoded path
+    return _RULESET_CACHE or None
+
 def yaml_dump_simple(data: dict, indent: int = 0) -> str:
     """Dump a dict to YAML. Handles only nested dicts, lists, strings, ints, bools, None."""
     lines = []
@@ -601,18 +624,23 @@ def classify_and_route(ev: CandidateEvent) -> Optional[RoutedEvent]:
                 },
             )
 
-    # === Detect heuristic FIRST (always/never patterns trump decision regex) ===
-    if ev.role == "user" and re.match(r"^\s*(always|never|toujours|jamais|don'?t|ne pas|prefer|avoid)\b",
-                                       content, re.IGNORECASE):
-        return RoutedEvent(
-            candidate=ev,
-            route="staged",
-            type_="heuristic",
-            provenance="user",
-            confidence="high",
-            distilled=content[:300],
-            extra={},
-        )
+    # === Rule-driven classification (heuristic / claim / constraint) ===
+    # These three rule paths live in harness/rules.yaml so they can be edited
+    # and contracted to eval fixtures without touching code (Tsinghua NLAH).
+    ruleset = _get_ruleset()
+    if ruleset is not None:
+        from harness.loader import classify_with_rules  # local import; cached
+        emit = classify_with_rules(ev, ruleset)
+        if emit is not None:
+            return RoutedEvent(
+                candidate=ev,
+                route=emit.get("route", "staged"),
+                type_=emit.get("type", "claim"),
+                provenance=emit.get("provenance", "unknown"),
+                confidence=emit.get("confidence", "low"),
+                distilled=content[:300],
+                extra={"rule_id": emit.get("rule_id", "")},
+            )
 
     # === Detect explicit decision ===
     if ev.role == "user":
@@ -664,48 +692,9 @@ def classify_and_route(ev: CandidateEvent) -> Optional[RoutedEvent]:
                 extra={"description": content[:500], "status": "open"},
             )
 
-    # === Stage potentially interpretive content ===
-    # Falsifiable claim from assistant
-    if ev.role == "assistant":
-        # Skip progress-narration messages — they are activity traces, not durable knowledge.
-        if META_WORK_PREFIXES.match(content.strip()):
-            return None
-        # "X is faster than Y" / "Z always fails"
-        if re.search(r"\b(is|are|works|fails|always|never)\b.*\b(than|on|when|because)\b",
-                      content, re.IGNORECASE) and len(content) < 400:
-            return RoutedEvent(
-                candidate=ev,
-                route="staged",
-                type_="claim",
-                provenance="ai-suggested",
-                confidence="low",
-                distilled=content[:300],
-                extra={},
-            )
-
-    # Constraint — but skip raw task instructions (long imperative messages)
-    if re.search(r"\b(must|requires|requires? at least|doit|nécessite|requires)\s+\S+",
-                 content, re.IGNORECASE) and ev.role == "user":
-        # Filter out raw user instructions: long messages with task-imperative openers
-        _TASK_IMPERATIVE = re.compile(
-            r"^(fix|create|add|update|remove|delete|refactor|implement|write|make|build|"
-            r"run|check|look|go|show|tell|crée|ajoute|supprime|mets|fais|regarde|va|"
-            r"corrige|génère|modifie|lance|installe)\b",
-            re.IGNORECASE,
-        )
-        is_raw_instruction = len(content) > 400 or bool(_TASK_IMPERATIVE.match(content.strip()))
-        if not is_raw_instruction:
-            return RoutedEvent(
-                candidate=ev,
-                route="staged",
-                type_="constraint",
-                provenance="user",
-                confidence="medium",
-                distilled=content[:300],
-                extra={},
-            )
-
-    # No classification — drop
+    # No classification — drop.
+    # (Heuristic / claim / constraint detection lives in harness/rules.yaml
+    # and is dispatched by the rule engine above.)
     return None
 
 

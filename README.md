@@ -141,6 +141,47 @@ the source of truth. Markdown can't lie when YAML is watching.
 
 ---
 
+## The harness is data, not code
+
+The classifier rules — *what counts as a heuristic, what counts as a
+constraint, what counts as a falsifiable claim* — used to live as Python
+regex inside the pipeline. Now they live in [`harness/rules.yaml`](harness/rules.yaml):
+
+```yaml
+- id: R-CONSTRAINT-MUST-REQUIRES
+  when:
+    role: user
+    content_matches_regex: "\\b(must|requires|doit|nécessite)\\s+\\S+"
+  unless:
+    any:
+      - content_length_gt: 400
+      - content_starts_with_imperative: true
+  emit:
+    route: staged
+    type: constraint
+    confidence: medium
+  contract:
+    must_not_fire_on:
+      - false_positive_instruction
+```
+
+Three things this gives you:
+
+1. **You can edit the rules without touching code.** Change a regex, add a
+   phrase, tighten a length threshold — `rules.yaml` is the spec.
+2. **Every rule is contracted to evals.** `must_fire_on` / `must_not_fire_on`
+   name the fixtures the rule is responsible for. `python3 scripts/run_evals.py
+   --verify-contracts` enforces them. A rule whose contract fails is a rule
+   that can't ship.
+3. **It builds the substrate for measured improvement.** Once the harness
+   is data with measurable contracts (Tsinghua *NLAH*, Stanford *Meta-Harness*),
+   any future "smarter" rule proposer is graded by the same metric the
+   project optimizes for: keep `false_promotion_rate` at zero.
+
+Full spec: [`harness/README.md`](harness/README.md).
+
+---
+
 ## Measured, not just felt
 
 insight-forge ships with a regression harness — `evals/` — that runs synthetic

@@ -1,0 +1,148 @@
+# ========================================================================
+# Insight Forge — portable classifier rule spec (Tsinghua-style NLAH)
+# ========================================================================
+#
+# Each rule expresses a classification decision in declarative form. The
+# pipeline loads this file at runtime; you can edit a rule, run
+# `python3 scripts/run_evals.py`, and see whether the change improves or
+# regresses the contracted fixtures — without touching Python.
+#
+# Schema:
+#   id          — short stable identifier (used in logs and bundles)
+#   description — one-line human-readable summary
+#   when        — predicate that must match for the rule to fire (AND of all keys)
+#   unless      — optional negative predicate; if it matches, the rule is skipped
+#   emit        — what RoutedEvent to produce when the rule fires
+#   contract    — eval fixtures this rule is contracted against (Stanford-style)
+#                   must_fire_on: rule MUST produce an event for this fixture
+#                   must_not_fire_on: rule MUST NOT produce an event for this fixture
+#
+# Predicate keys (composable, evaluated as AND):
+#   role: <user|assistant|tool_use|tool_result|system>
+#   tool_status: <ok|error>
+#   content_matches_regex: <pattern>           — re.search, re.IGNORECASE
+#   content_starts_with_regex: <pattern>       — re.match, re.IGNORECASE
+#   content_contains_any_phrase_list: <name>   — references a phrase list defined below
+#   content_length_lt: <int>
+#   content_length_gt: <int>
+#   content_starts_with_imperative: <bool>     — task-imperative verb filter (issue #13)
+#   matches_meta_work_prefix: <bool>           — assistant progress-narration filter
+#
+# `emit` keys:
+#   route: direct | staged
+#   type:  claim | heuristic | dead_end | constraint | concept | decision | pivot | experiment | question
+#   provenance: user | ai-suggested | ai-executed | user-revised | unknown
+#   confidence: high | medium | low
+
+version: 1
+
+# Phrase lists referenced by rules. Edit these to tune trigger sensitivity
+# without rewriting regexes.
+phrase_lists:
+  affirmation:
+    - "yes"
+    - "oui"
+    - "confirmed"
+    - "confirme"
+    - "correct"
+    - "exact"
+    - "c'est ça"
+    - "let's go with"
+    - "on part sur"
+    - "ship it"
+    - "exactly"
+    - "perfect"
+    - "parfait"
+
+# Task-imperative openers that disqualify a "must/requires" message from
+# being a project constraint (issue #13).
+imperative_openers:
+  - fix
+  - create
+  - add
+  - update
+  - remove
+  - delete
+  - refactor
+  - implement
+  - write
+  - make
+  - build
+  - run
+  - check
+  - look
+  - go
+  - show
+  - tell
+  - crée
+  - ajoute
+  - supprime
+  - mets
+  - fais
+  - regarde
+  - va
+  - corrige
+  - génère
+  - modifie
+  - lance
+  - installe
+
+rules:
+  # --------------------------------------------------------------------
+  - id: R-HEURISTIC-ALWAYS-NEVER
+    description: User states a project rule via always/never/prefer/avoid
+    when:
+      role: user
+      content_starts_with_regex: "^\\s*(always|never|toujours|jamais|don'?t|ne pas|prefer|avoid)\\b"
+    emit:
+      route: staged
+      type: heuristic
+      provenance: user
+      confidence: high
+    contract:
+      must_fire_on:
+        - simple_success
+      must_not_fire_on:
+        - false_positive_instruction
+        - no_signal
+
+  # --------------------------------------------------------------------
+  - id: R-CONSTRAINT-MUST-REQUIRES
+    description: User constraint expressed via must/requires/doit/nécessite
+    when:
+      role: user
+      content_matches_regex: "\\b(must|requires|doit|nécessite)\\s+\\S+"
+    unless:
+      # Filter out raw user task instructions (issue #13). Either the message
+      # is too long to be a constraint, or it starts with an imperative verb.
+      any:
+        - content_length_gt: 400
+        - content_starts_with_imperative: true
+    emit:
+      route: staged
+      type: constraint
+      provenance: user
+      confidence: medium
+    contract:
+      must_not_fire_on:
+        - false_positive_instruction
+
+  # --------------------------------------------------------------------
+  - id: R-CLAIM-ASSISTANT
+    description: Assistant produces a falsifiable comparative claim
+    when:
+      role: assistant
+      content_matches_regex: "\\b(is|are|works|fails|always|never)\\b.*\\b(than|on|when|because)\\b"
+      content_length_lt: 400
+    unless:
+      matches_meta_work_prefix: true
+    emit:
+      route: staged
+      type: claim
+      provenance: ai-suggested
+      confidence: low
+    contract:
+      must_fire_on:
+        - empirical_resolution
+        - abandoned_topic
+        - no_signal
