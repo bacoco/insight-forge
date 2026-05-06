@@ -33,6 +33,25 @@ All notable changes to this project are documented in this file. The format is b
   classification (EN + FR), contradiction detection over realistic
   positive/negative pairs, self-duplicate scanning with header
   filtering, and contradiction integration against existing CLAUDE.md.
+- **artifact-commitment closure signal (MVP)**. Implements signal 4
+  of the ARA closure-signal set, which had been a TODO since the
+  project's first commit. Detection is deterministic and uses two
+  passes: (1) path mentioned in the rule + path exists on disk under
+  the project root; (2) tool name mentioned in the rule + canonical
+  marker file exists OR config file references the tool (e.g.
+  `[tool.ruff]` in `pyproject.toml`, `"packageManager": "pnpm@..."`
+  in `package.json`). No git walk, no AST. Conservative — fires only
+  on hard on-disk evidence.
+- Inserted in `evaluate_maturity` before topic-abandonment (artifact-
+  commitment is stronger evidence than silence over time). When
+  `project_root` is absent (e.g. pipeline run with an unrelated
+  forge_dir), the signal silently skips — preserves backward
+  compatibility.
+- 26 unit tests in `test_artifact_commitment.py` (path extraction,
+  tool extraction, all three matcher branches, defensive paths) +
+  3 integration tests in `test_pipeline_artifact_commitment.py`
+  (signal does not fire without marker, fires when lockfile exists,
+  silent when project_root missing).
 
 ### Fixed
 

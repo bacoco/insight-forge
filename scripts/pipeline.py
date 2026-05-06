@@ -808,8 +808,15 @@ def generate_counter_evidence(observation: dict, type_: str) -> str:
 
 
 def evaluate_maturity(obs: dict, all_candidates: list[CandidateEvent],
-                       all_sessions: list[dict]) -> CrystallizationDecision:
-    """Apply the 4 closure signals."""
+                       all_sessions: list[dict],
+                       project_root: Optional[Path] = None) -> CrystallizationDecision:
+    """Apply the 4 closure signals.
+
+    `project_root` is the directory used to scan for artifact-commitment
+    evidence (file existence, config references). When None, that signal
+    silently skips — preserves backward compatibility with callers that
+    don't have a project root context.
+    """
     obs_id = obs.get("id", "?")
     pot_type = obs.get("potential_type", "unknown")
 
@@ -856,6 +863,24 @@ def evaluate_maturity(obs: dict, all_candidates: list[CandidateEvent],
             generate_counter_evidence({"content": obs.get("content", "")}, "dead_end"),
         )
 
+    # Signal 4: artifact commitment — code or config now depends on this
+    # observation. Stronger evidence than topic-abandonment (which is just
+    # silence over time), so it fires BEFORE the abandonment check.
+    if project_root is not None:
+        try:
+            sys.path.insert(0, str(Path(__file__).resolve().parent))
+            from artifact_commitment import detect_artifact_commitment  # noqa: E402
+            artifact = detect_artifact_commitment(obs.get("content", ""), project_root)
+            if artifact:
+                return CrystallizationDecision(
+                    obs_id, "artifact-commitment", target,
+                    f"Artifact found: {artifact}",
+                    generate_counter_evidence(obs, target),
+                )
+        except Exception:
+            # Defensive: artifact detection must never break the pipeline.
+            pass
+
     # Signal 1: topic abandonment
     if detect_topic_abandonment(obs, all_sessions):
         return CrystallizationDecision(
@@ -863,9 +888,6 @@ def evaluate_maturity(obs: dict, all_candidates: list[CandidateEvent],
             "Topic absent from recent sessions",
             generate_counter_evidence(obs, target),
         )
-
-    # Signal 4: artifact commitment
-    # (Hard to check without actual git/file scanning — left as TODO)
 
     # No signal fired
     return CrystallizationDecision(obs_id, None, None, "no signal fired", "")
@@ -1196,13 +1218,21 @@ def run_pipeline(input_path: Path, forge_dir: Path,
     crystallized_count = 0
     contradictions = 0
 
+    # Project root for artifact-commitment scanning. By convention forge_dir
+    # is `.insight-forge/` inside the project root, so the parent is what
+    # we scan. When pipeline.py is invoked with an explicit forge_dir
+    # somewhere unrelated, the parent may not be a real project — in that
+    # case detect_artifact_commitment returns None silently.
+    project_root = forge_dir.parent
+
     for obs in obs_data.get("observations", []):
         if obs.get("promoted"):
             continue
         # Build a session_index-like list for topic-abandonment check
         all_session_summaries = [{"id": m.get("session_short", ""), "date": m.get("mtime", ""),
                                   "summary": ""} for m in session_metas]
-        decision = evaluate_maturity(obs, candidates, all_session_summaries)
+        decision = evaluate_maturity(obs, candidates, all_session_summaries,
+                                       project_root=project_root)
 
         if decision.fired_signal is None:
             # Stale check
