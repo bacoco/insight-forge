@@ -61,6 +61,17 @@ All notable changes to this project are documented in this file. The format is b
   SDK. Defensive: errors from a misbehaving provider surface on
   stderr and never crash the proposer; malformed return values are
   filtered. 6 unit tests pin the contract.
+- **Routing-fit classification.** New `scripts/routing.py` flags
+  proposed entries that look out of place in a CLAUDE.md / AGENTS.md
+  rule list — currently two narrow signals: (a) **project-specific**
+  when the entry contains an absolute home path (`/Users/<name>/...`,
+  `/home/<name>/...`) that shouldn't end up in a shared/global file,
+  and (b) **narrative** when the text is long (>200 chars) and
+  contains first-person story markers ("I tried...", "we discovered…").
+  Annotation only — no auto-routing, no destination committed to.
+  17 unit tests pin both the positive cases and the false-positive
+  patterns we explicitly avoid (system paths like `/usr/local/bin`,
+  short rules with first-person markers, long imperative rules).
 
 ### Fixed
 
