@@ -199,6 +199,46 @@ is a suggestion the user reviews; the human decides whether to merge,
 replace, keep both, or do something else entirely. Same conservative
 contract as the rest of the project.
 
+### Opt-in semantic similarity (LLM / embedding seam)
+
+The deterministic Jaccard check catches most realistic duplicates but
+misses **vocabulary-disjoint** cases — e.g. *"always use SQLite"* vs
+*"Postgres is the primary store"* share zero tokens after stopword
+removal but contradict each other.
+
+`find_near_duplicates(..., extra_matcher=callable)` accepts a user-
+provided callable that's invoked **only when the deterministic check
+finds nothing**. This keeps token cost at zero on the common path. The
+callable receives `(candidate_text, existing_entries)` and returns a
+list of `{id, similarity, reason}` dicts.
+
+```python
+from similarity import find_near_duplicates
+
+def my_llm_matcher(candidate, existing):
+    # Call your LLM provider, return matches the cheap check missed.
+    # The repo intentionally doesn't ship a specific SDK adapter —
+    # provider choice, cost limits, and prompt design belong to the user.
+    ...
+
+result = find_near_duplicates(
+    candidate_text=text,
+    candidate_id="C99",
+    candidate_session="...",
+    existing_entries=entries,
+    extra_matcher=my_llm_matcher,    # opt-in, costs tokens
+)
+```
+
+The seam is defensive: a matcher that raises does not crash the
+proposer, just surfaces a single stderr line and falls back to the
+deterministic result. A matcher returning malformed entries (non-dict,
+missing `id`) silently drops them.
+
+To wire an LLM provider system-wide, pass `extra_matcher=` from your
+own script that imports `propose_claude_md`. The default proposer
+flow does not invoke an LLM unless you opt in.
+
 ## Marking a known gap
 
 Add to `evals/expected/<fixture>.expected.yaml`:

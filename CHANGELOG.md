@@ -52,6 +52,15 @@ All notable changes to this project are documented in this file. The format is b
   3 integration tests in `test_pipeline_artifact_commitment.py`
   (signal does not fire without marker, fires when lockfile exists,
   silent when project_root missing).
+- **Opt-in semantic similarity seam.** `find_near_duplicates` now
+  accepts an `extra_matcher` callable that's invoked only when the
+  deterministic check finds nothing — keeps token cost at zero on
+  the common path. The callable receives `(candidate, existing)` and
+  returns extra `{id, similarity, reason}` matches. Designed for
+  LLM / embedding providers without coupling the repo to any specific
+  SDK. Defensive: errors from a misbehaving provider surface on
+  stderr and never crash the proposer; malformed return values are
+  filtered. 6 unit tests pin the contract.
 
 ### Fixed
 

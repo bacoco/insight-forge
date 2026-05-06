@@ -262,3 +262,133 @@ def test_text_lines_returns_only_best_match():
         text_lines=lines,
     )
     assert len(result) == 1
+
+
+# --- extra_matcher seam (opt-in semantic similarity) ------------------
+
+def test_extra_matcher_called_when_deterministic_finds_nothing():
+    """The seam: when deterministic returns no matches, an extra matcher
+    can supply additional results. This is the entry point for an opt-in
+    LLM/embedding provider."""
+    existing = [
+        {"id": "C01", "text": "Postgres is the primary store",
+          "session": "aaaa1111"},
+    ]
+
+    def fake_llm_matcher(candidate, existing_entries):
+        # Pretend the LLM detected a semantic contradiction.
+        return [{
+            "id": "C01",
+            "similarity": 0.85,
+            "reason": "llm: same architectural choice topic, opposite",
+        }]
+
+    result = find_near_duplicates(
+        candidate_text="Always use SQLite for the data store",
+        candidate_id="C99",
+        candidate_session="bbbb2222",
+        existing_entries=existing,
+        extra_matcher=fake_llm_matcher,
+    )
+    assert len(result) == 1
+    assert result[0]["id"] == "C01"
+    assert "llm" in result[0]["reason"]
+
+
+def test_extra_matcher_skipped_when_deterministic_finds_match():
+    """Cost discipline: if the cheap deterministic check already found a
+    match, the extra matcher is NOT called. Keeps token usage at zero
+    on the common path."""
+    existing = [
+        {"id": "H01", "text": "Use pnpm not npm in this repo",
+          "session": "aaaa1111"},
+    ]
+    call_count = [0]
+
+    def fake_matcher(candidate, existing_entries):
+        call_count[0] += 1
+        return []
+
+    find_near_duplicates(
+        candidate_text="Always use pnpm in this repo, never npm",
+        candidate_id="H02",
+        candidate_session="bbbb2222",
+        existing_entries=existing,
+        extra_matcher=fake_matcher,
+    )
+    assert call_count[0] == 0, \
+        "extra_matcher was invoked despite deterministic match"
+
+
+def test_extra_matcher_errors_are_caught(capsys):
+    """A broken matcher must NEVER crash the proposer. The error surfaces
+    on stderr so the user knows, but the deterministic result wins."""
+    def broken_matcher(candidate, existing):
+        raise RuntimeError("my LLM provider is on fire")
+
+    result = find_near_duplicates(
+        candidate_text="Always use SQLite",
+        candidate_id="C99",
+        candidate_session="z",
+        existing_entries=[{"id": "C01", "text": "totally unrelated rule",
+                            "session": "x"}],
+        extra_matcher=broken_matcher,
+    )
+    # No deterministic match, broken extra matcher → empty result, no crash
+    assert result == []
+    captured = capsys.readouterr()
+    assert "extra_matcher raised" in captured.err
+
+
+def test_extra_matcher_skips_self_id_in_extras():
+    """If the extra matcher mistakenly returns the candidate's own id,
+    it must be filtered out — same self-comparison guard as the
+    deterministic path."""
+    def fake(candidate, existing):
+        return [{"id": "C99", "similarity": 0.8, "reason": "fake"},
+                {"id": "C01", "similarity": 0.7, "reason": "real"}]
+
+    result = find_near_duplicates(
+        candidate_text="anything",
+        candidate_id="C99",
+        candidate_session="z",
+        existing_entries=[{"id": "C01", "text": "totally unrelated"}],
+        extra_matcher=fake,
+    )
+    assert len(result) == 1
+    assert result[0]["id"] == "C01"
+
+
+def test_extra_matcher_handles_malformed_returns():
+    """Defensive: a matcher that returns non-dict items, or items missing
+    `id`, must be filtered without crashing."""
+    def malformed(candidate, existing):
+        return [
+            None,                                        # not a dict
+            {"similarity": 0.9, "reason": "no id"},       # missing id
+            {"id": "C01", "similarity": 0.7, "reason": "ok"},
+        ]
+
+    result = find_near_duplicates(
+        candidate_text="x",
+        candidate_id="C99",
+        candidate_session="z",
+        existing_entries=[{"id": "C01", "text": "totally unrelated"}],
+        extra_matcher=malformed,
+    )
+    assert len(result) == 1
+    assert result[0]["id"] == "C01"
+
+
+def test_extra_matcher_returning_none_is_treated_as_empty():
+    def returns_none(candidate, existing):
+        return None
+
+    result = find_near_duplicates(
+        candidate_text="x",
+        candidate_id="C99",
+        candidate_session="z",
+        existing_entries=[{"id": "C01", "text": "totally unrelated"}],
+        extra_matcher=returns_none,
+    )
+    assert result == []
