@@ -212,6 +212,30 @@ def _read_target_md_lines(forge_dir: Path) -> list[str]:
     return out
 
 
+def _contradiction_annotation(forge_dir: Path, entry: dict, prefix: str) -> str:
+    """Surface lines in the existing CLAUDE.md / AGENTS.md that this entry
+    appears to contradict. Returns markdown for the proposal entry block,
+    empty string when nothing matches.
+    """
+    sys.path.insert(0, str(Path(__file__).resolve().parent))
+    from contradiction import find_contradicted_lines  # noqa: E402
+
+    cand_text = _entry_text_for_similarity(entry, prefix)
+    if not cand_text:
+        return ""
+    target_lines = _read_target_md_lines(forge_dir)
+    if not target_lines:
+        return ""
+    matches = find_contradicted_lines(cand_text, target_lines)
+    chunks: list[str] = []
+    for m in matches[:2]:
+        chunks.append(
+            f"  - ⚠ *Suggested removal*: \"{m['line']}\" appears to be "
+            f"contradicted by this entry\n"
+        )
+    return "".join(chunks)
+
+
 def _near_duplicate_annotation(forge_dir: Path, entry: dict, prefix: str,
                                 same_layer_entries: list[dict]) -> str:
     """Compute the optional `⚠ Possibly redundant: ...` markdown line for
@@ -305,6 +329,7 @@ def build_proposal(forge_dir: Path, target: str, agent_name: str,
             out.append(f"- **{h['id']}**: {rule}\n")
             out.append(_bundle_quotes(forge_dir, h["id"]))
             out.append(_near_duplicate_annotation(forge_dir, h, "H", heuristics))
+            out.append(_contradiction_annotation(forge_dir, h, "H"))
             if counter and counter != "not_explored":
                 out.append(f"  - *Caveat*: {counter}\n")
             out.append(f"  - *Sessions*: {sessions}\n\n")
@@ -319,6 +344,7 @@ def build_proposal(forge_dir: Path, target: str, agent_name: str,
             out.append(f"- **{c['id']}** *({status})*: {stmt}\n")
             out.append(_bundle_quotes(forge_dir, c["id"]))
             out.append(_near_duplicate_annotation(forge_dir, c, "C", claims))
+            out.append(_contradiction_annotation(forge_dir, c, "C"))
             if counter and counter != "not_explored":
                 out.append(f"  - *Counter-evidence*: {counter}\n")
             out.append(f"  - *Sessions*: {sessions}\n\n")
@@ -333,11 +359,33 @@ def build_proposal(forge_dir: Path, target: str, agent_name: str,
             out.append(f"- **{d['id']}**: avoid {avoid}\n")
             out.append(_bundle_quotes(forge_dir, d["id"]))
             out.append(_near_duplicate_annotation(forge_dir, d, "D", dead_ends))
+            out.append(_contradiction_annotation(forge_dir, d, "D"))
             if lesson:
                 out.append(f"  - *Lesson*: {lesson}\n")
             if could and could != "not_explored":
                 out.append(f"  - *Could have worked if*: {could}\n")
             out.append(f"  - *Sessions*: {sessions}\n\n")
+
+    # Self-duplicate scan: surface lines IN the existing CLAUDE.md /
+    # AGENTS.md that look redundant with each other. This is independent
+    # of any newly-crystallized entry — it's a one-time audit of the
+    # target file. Only emitted if matches exist, so the proposal stays
+    # short when the user's CLAUDE.md is clean.
+    target_lines = _read_target_md_lines(forge_dir)
+    if target_lines:
+        sys.path.insert(0, str(Path(__file__).resolve().parent))
+        from contradiction import find_self_duplicates  # noqa: E402
+        self_dups = find_self_duplicates(target_lines)
+        if self_dups:
+            out.append("### Cleanup — self-duplicates in your existing file\n\n")
+            out.append("These pairs of lines in your current `")
+            out.append("CLAUDE.md`/`AGENTS.md` say the same thing — consider "
+                       "consolidating:\n\n")
+            for m in self_dups[:5]:  # cap at 5 to avoid wall of warnings
+                out.append(f"- ⚠ *Possible self-duplicate* "
+                           f"(token overlap {m['similarity']}, {m['reason']})\n")
+                out.append(f"  - \"{m['line_a']}\"\n")
+                out.append(f"  - \"{m['line_b']}\"\n\n")
 
     if not (heuristics or claims or dead_ends):
         out.append("_No cristallized knowledge yet — re-run after more sessions or after `--challenge`._\n\n")
@@ -526,18 +574,24 @@ def _print_summary(forge_dir: Path, out_path: Path, target: str, since) -> None:
         sys.stderr.write(f"  · {staged_pending} observation{'s' if staged_pending != 1 else ''} "
                          f"still in staging (need more sessions)\n")
 
-    # Count "Possibly redundant" annotations in the proposal so the user
-    # notices the bloat warning without having to open the file.
+    # Count cleanup-related warnings in the proposal so the user notices
+    # them without having to open the file.
     try:
         proposal_text = out_path.read_text(encoding="utf-8")
         redundant_count = proposal_text.count("⚠ *Possibly redundant*")
         already_in_count = proposal_text.count("⚠ *Already in your")
-        if redundant_count or already_in_count:
-            sys.stderr.write(
-                f"  ⚠ {redundant_count + already_in_count} possible redundancy "
-                f"warning{'s' if redundant_count + already_in_count != 1 else ''} "
-                f"in this proposal — review before pasting\n"
-            )
+        suggested_removal = proposal_text.count("⚠ *Suggested removal*")
+        self_dup = proposal_text.count("⚠ *Possible self-duplicate*")
+        total = redundant_count + already_in_count + suggested_removal + self_dup
+        if total:
+            parts = []
+            if redundant_count or already_in_count:
+                parts.append(f"{redundant_count + already_in_count} possible redundancy")
+            if suggested_removal:
+                parts.append(f"{suggested_removal} suggested removal{'s' if suggested_removal != 1 else ''}")
+            if self_dup:
+                parts.append(f"{self_dup} self-duplicate{'s' if self_dup != 1 else ''}")
+            sys.stderr.write(f"  ⚠ {', '.join(parts)} in this proposal — review before pasting\n")
     except Exception:
         pass
 
