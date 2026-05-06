@@ -134,6 +134,13 @@ def filter_recent(entries: list[dict], since: datetime, sessions_index_path: Pat
         return entries
 
     recent_session_ids = set()
+    # Initialize before the loop. Without this, a YAML where a `date:` line
+    # appears before any `- id:` line raises UnboundLocalError on the
+    # `if m_date and current_id` check (issue #30, reported by Alexmacapple).
+    # PyYAML's safe_dump sorts mapping keys alphabetically by default, so
+    # each list item's first line is `- agent:` (a < d < f < i), the `id:`
+    # line comes later, and the regex's leading-dash anchor misses it.
+    current_id: str | None = None
     for line in idx_text.split("\n"):
         m = re.search(r"^\s*-\s*id:\s*(\S+)", line)
         if m:
