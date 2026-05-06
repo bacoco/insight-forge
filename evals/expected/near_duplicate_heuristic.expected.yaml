@@ -1,0 +1,27 @@
+# Two sessions, two near-duplicate heuristics. Both crystallize via
+# verbal-affirmation. The pipeline doesn't dedupe (each session's promotion
+# is independent — duplicates are expected to surface).
+#
+# What the eval harness asserts here is the pipeline-level behavior:
+# 2 heuristics get cristallized, 2 evidence bundles, all quotes traceable.
+# The "this looks like a duplicate" annotation lives in the proposal layer
+# and is exercised by tests/test_propose_claude_md.py (integration test).
+crystallized:
+  total: 2
+  by_layer:
+    heuristic: 2
+    claim: 0
+    dead_end: 0
+    constraint: 0
+    concept: 0
+staged_only: 0
+expected_signals:
+  - verbal-affirmation
+must_have_evidence_bundle: true
+must_have_counter_evidence: true
+notes: |
+  This fixture is the regression test for near-duplicate annotation. Two
+  sessions independently crystallize the same project rule ("Always use
+  pnpm not npm"). Both promotions are correct in isolation — what's
+  redundant is the resulting CLAUDE.md proposal, which is where the
+  similarity check fires.

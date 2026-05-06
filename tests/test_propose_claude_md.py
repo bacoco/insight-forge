@@ -127,3 +127,73 @@ def test_filter_recent_handles_unparseable_date_silently(tmp_path):
     result = filter_recent([_ENTRY], since, sidx)
     # No usable recent IDs → entries returned unchanged.
     assert result == [_ENTRY]
+
+
+# --- near-duplicate annotation in proposals ----------------------------
+
+import subprocess
+import sys
+
+REPO_ROOT = Path(__file__).resolve().parent.parent
+
+
+def _run_pipeline_then_propose(fixture_path: Path, forge_dir: Path) -> str:
+    """Run the full pipeline + proposer on a fixture, return proposal text."""
+    pipeline = REPO_ROOT / "scripts" / "pipeline.py"
+    propose = REPO_ROOT / "scripts" / "propose_claude_md.py"
+
+    res = subprocess.run(
+        [sys.executable, str(pipeline),
+          "--input", str(fixture_path),
+          "--forge-dir", str(forge_dir)],
+        capture_output=True, text=True,
+    )
+    assert res.returncode == 0, f"pipeline failed: {res.stderr}"
+
+    res = subprocess.run(
+        [sys.executable, str(propose), "--forge-dir", str(forge_dir)],
+        capture_output=True, text=True,
+    )
+    assert res.returncode == 0, f"propose failed: {res.stderr}"
+
+    proposal_path = Path(res.stdout.strip())
+    return proposal_path.read_text(encoding="utf-8")
+
+
+def test_proposal_flags_near_duplicate_heuristics(tmp_path):
+    """The near_duplicate_heuristic fixture produces two heuristics about
+    pnpm vs npm. The proposal should annotate the second one with a
+    'Possibly redundant' marker pointing at the first."""
+    fixture = REPO_ROOT / "evals" / "fixtures" / "near_duplicate_heuristic.jsonl"
+    proposal = _run_pipeline_then_propose(fixture, tmp_path / ".forge")
+    assert "⚠ *Possibly redundant*" in proposal, (
+        "Proposal did not flag the near-duplicate. Got:\n" + proposal[:2000]
+    )
+
+
+def test_proposal_does_not_flag_unrelated_entries(tmp_path):
+    """The simple_success fixture produces exactly one heuristic. There's
+    nothing to be redundant with — the proposal must NOT contain a
+    'Possibly redundant' annotation."""
+    fixture = REPO_ROOT / "evals" / "fixtures" / "simple_success.jsonl"
+    proposal = _run_pipeline_then_propose(fixture, tmp_path / ".forge")
+    assert "⚠ *Possibly redundant*" not in proposal
+
+
+def test_proposal_flags_against_existing_claude_md(tmp_path):
+    """When a CLAUDE.md sits at the project root with a rule similar to a
+    newly-crystallized one, the proposal should call it out so the user
+    doesn't paste a duplicate on top of an existing one."""
+    fixture = REPO_ROOT / "evals" / "fixtures" / "simple_success.jsonl"
+    forge_dir = tmp_path / ".insight-forge"
+    project_root = tmp_path  # project root = parent of forge_dir
+    (project_root / "CLAUDE.md").write_text(
+        "# Project rules\n\n"
+        "- Always use pnpm in this repo, never use npm.\n",
+        encoding="utf-8",
+    )
+    proposal = _run_pipeline_then_propose(fixture, forge_dir)
+    assert "⚠ *Already in your" in proposal, (
+        "Proposal did not flag the existing CLAUDE.md line. Got:\n"
+        + proposal[:2000]
+    )
