@@ -1,0 +1,10 @@
+{"_marker": "session_start", "session_id": "ndh10001-0000-0000-0000-00000000001a", "session_short": "ndh10001", "agent": "claude", "mtime": "2026-05-03T10:00:00", "size_kb": 3}
+{"role": "user", "content": "Always use pnpm not npm in this repo for package management.", "timestamp": "2026-05-03T10:00:05", "session_id": "ndh10001-0000-0000-0000-00000000001a", "session_short": "ndh10001", "agent": "claude"}
+{"role": "assistant", "content": "Got it.", "timestamp": "2026-05-03T10:00:10", "session_id": "ndh10001-0000-0000-0000-00000000001a", "session_short": "ndh10001", "agent": "claude"}
+{"role": "user", "content": "yes parfait", "timestamp": "2026-05-03T10:00:20", "session_id": "ndh10001-0000-0000-0000-00000000001a", "session_short": "ndh10001", "agent": "claude"}
+{"_marker": "session_end"}
+{"_marker": "session_start", "session_id": "ndh20002-0000-0000-0000-00000000001b", "session_short": "ndh20002", "agent": "claude", "mtime": "2026-05-04T10:00:00", "size_kb": 3}
+{"role": "user", "content": "Always use pnpm in this repo, never npm.", "timestamp": "2026-05-04T10:00:05", "session_id": "ndh20002-0000-0000-0000-00000000001b", "session_short": "ndh20002", "agent": "claude"}
+{"role": "assistant", "content": "OK.", "timestamp": "2026-05-04T10:00:10", "session_id": "ndh20002-0000-0000-0000-00000000001b", "session_short": "ndh20002", "agent": "claude"}
+{"role": "user", "content": "exact, c'est ça la règle", "timestamp": "2026-05-04T10:00:20", "session_id": "ndh20002-0000-0000-0000-00000000001b", "session_short": "ndh20002", "agent": "claude"}
+{"_marker": "session_end"}

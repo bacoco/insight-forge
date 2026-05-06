@@ -169,6 +169,36 @@ seam — an LLM-based generator can replace it without touching the
 sandboxing or scoring code. See `harness/proposals/README.md` for the
 proposal file format and how to apply one.
 
+## Avoiding bloat — near-duplicate detection in proposals
+
+The conservative-by-default contract protects against *over-confident*
+promotion. It does **not** protect against *redundant* promotion — two
+sessions independently confirming the same rule produce two crystallized
+entries, and without intervention both end up in the proposal markdown.
+
+`scripts/similarity.py` adds a deterministic check (no LLM) that runs at
+proposal time. For each entry, the proposer compares against:
+
+1. Other entries in the same layer (heuristics vs heuristics, etc.)
+2. Lines in the existing `CLAUDE.md` / `AGENTS.md` at the project root,
+   if either file is present.
+
+When token-Jaccard similarity passes the threshold (default 0.6) **or** a
+subset relation fires, the entry gets a `⚠ Possibly redundant: ...` line
+in the rendered proposal. The friendly stderr summary surfaces the count
+(`⚠ 2 possible redundancy warnings in this proposal`) so the user
+notices before pasting.
+
+The check is conservative — false positives are worse than false negatives
+because a noisy detector trains users to ignore the warning. Stopwords
+are filtered (English + French function words), one-letter tokens are
+dropped, and short markdown lines are skipped to avoid matching headers.
+
+The proposer **never** removes, merges, or hides an entry. The annotation
+is a suggestion the user reviews; the human decides whether to merge,
+replace, keep both, or do something else entirely. Same conservative
+contract as the rest of the project.
+
 ## Marking a known gap
 
 Add to `evals/expected/<fixture>.expected.yaml`:

@@ -6,6 +6,26 @@ All notable changes to this project are documented in this file. The format is b
 
 ## [Unreleased]
 
+### Added
+
+- **Near-duplicate detection in proposals.** New `scripts/similarity.py`
+  with token-level Jaccard + subset-relation checks. The proposer now
+  annotates each entry with a `⚠ Possibly redundant: <id>` line when a
+  near-duplicate exists in the same layer or in the project's existing
+  `CLAUDE.md` / `AGENTS.md`. Friendly stderr summary surfaces the count.
+  Conservative by design: stopwords (EN + FR) are filtered, one-letter
+  tokens dropped, and the proposer never removes or hides any entry —
+  the annotation is a suggestion the user reviews.
+- New eval fixture `near_duplicate_heuristic` (two sessions producing
+  near-duplicate heuristics) + 26 unit tests in `test_similarity.py` +
+  3 integration tests in `test_propose_claude_md.py`.
+
+### Fixed
+
+- `propose_claude_md.py:filter_recent` no longer raises
+  `UnboundLocalError` when PyYAML's alphabetically-sorted output places
+  `date:` before `id:` in `trace/session_index.yaml` (issue #30).
+
 ## [0.1.0] — 2026-05-05
 
 First tagged version. The project is shippable as a personal tool with full executable

@@ -167,6 +167,109 @@ def filter_recent(entries: list[dict], since: datetime, sessions_index_path: Pat
     return kept
 
 
+def _entry_text_for_similarity(e: dict, prefix: str) -> str:
+    """Pick the field that best captures what the entry means.
+
+    For heuristics we want the rule text; for claims, the statement; for
+    dead ends, the lesson + avoid signal. Falls back to the title when
+    the structured field is missing.
+    """
+    if prefix == "H":
+        return e.get("Rule") or e.get("title") or ""
+    if prefix == "C":
+        return e.get("Statement") or e.get("title") or ""
+    if prefix == "D":
+        lesson = e.get("Lesson") or ""
+        avoid = e.get("Avoid signal") or ""
+        return f"{avoid} {lesson}".strip() or e.get("title") or ""
+    return e.get("title") or ""
+
+
+def _entry_session(e: dict) -> str:
+    """Extract the first session id from the `Sessions: [a, b]` field."""
+    sessions_field = e.get("Sessions", "")
+    ids = re.findall(r"[a-f0-9]{4,}", sessions_field)
+    return ids[0] if ids else ""
+
+
+def _read_target_md_lines(forge_dir: Path) -> list[str]:
+    """Best-effort: read CLAUDE.md / AGENTS.md from project root for
+    cross-comparison against incoming entries. Empty list if neither
+    exists or both fail to read."""
+    project_root = forge_dir.parent
+    out: list[str] = []
+    for name in ("CLAUDE.md", "AGENTS.md"):
+        p = project_root / name
+        if not p.exists():
+            continue
+        try:
+            for line in p.read_text(encoding="utf-8").splitlines():
+                s = line.strip()
+                if s and len(s) > 20:
+                    out.append(s)
+        except Exception:
+            pass
+    return out
+
+
+def _near_duplicate_annotation(forge_dir: Path, entry: dict, prefix: str,
+                                same_layer_entries: list[dict]) -> str:
+    """Compute the optional `⚠ Possibly redundant: ...` markdown line for
+    one entry. Empty string when no near-duplicate is found.
+
+    Two passes:
+      1. Compare against other crystallized entries in the same layer
+         (catches duplicates produced across multiple sessions).
+      2. Compare against existing CLAUDE.md / AGENTS.md lines in the
+         project root (catches drift between proposals and what the user
+         already has).
+    """
+    sys.path.insert(0, str(Path(__file__).resolve().parent))
+    from similarity import (find_near_duplicates,  # noqa: E402
+                              find_near_duplicates_in_text)
+
+    cand_text = _entry_text_for_similarity(entry, prefix)
+    if not cand_text:
+        return ""
+
+    cand_id = entry.get("id", "")
+    cand_session = _entry_session(entry)
+
+    siblings = [
+        {
+            "id": e.get("id", ""),
+            "text": _entry_text_for_similarity(e, prefix),
+            "session": _entry_session(e),
+        }
+        for e in same_layer_entries
+        if e.get("id") and e.get("id") != cand_id
+    ]
+    sibling_matches = find_near_duplicates(
+        candidate_text=cand_text,
+        candidate_id=cand_id,
+        candidate_session=cand_session,
+        existing_entries=siblings,
+    )
+
+    chunks: list[str] = []
+    for m in sibling_matches[:2]:  # cap at 2 — long lists become noise
+        chunks.append(
+            f"  - ⚠ *Possibly redundant*: {m['id']} "
+            f"(token overlap {m['similarity']}, {m['reason']})\n"
+        )
+
+    target_lines = _read_target_md_lines(forge_dir)
+    if target_lines:
+        target_matches = find_near_duplicates_in_text(cand_text, target_lines)
+        for m in target_matches:
+            chunks.append(
+                f"  - ⚠ *Already in your CLAUDE.md / AGENTS.md*: "
+                f"\"{m['line']}\" (token overlap {m['similarity']})\n"
+            )
+
+    return "".join(chunks)
+
+
 def build_proposal(forge_dir: Path, target: str, agent_name: str,
                     since: datetime = None) -> str:
     """Compose the proposal markdown."""
@@ -201,6 +304,7 @@ def build_proposal(forge_dir: Path, target: str, agent_name: str,
             sessions = h.get("Sessions", "[]")
             out.append(f"- **{h['id']}**: {rule}\n")
             out.append(_bundle_quotes(forge_dir, h["id"]))
+            out.append(_near_duplicate_annotation(forge_dir, h, "H", heuristics))
             if counter and counter != "not_explored":
                 out.append(f"  - *Caveat*: {counter}\n")
             out.append(f"  - *Sessions*: {sessions}\n\n")
@@ -214,6 +318,7 @@ def build_proposal(forge_dir: Path, target: str, agent_name: str,
             sessions = c.get("Sessions", "[]")
             out.append(f"- **{c['id']}** *({status})*: {stmt}\n")
             out.append(_bundle_quotes(forge_dir, c["id"]))
+            out.append(_near_duplicate_annotation(forge_dir, c, "C", claims))
             if counter and counter != "not_explored":
                 out.append(f"  - *Counter-evidence*: {counter}\n")
             out.append(f"  - *Sessions*: {sessions}\n\n")
@@ -227,6 +332,7 @@ def build_proposal(forge_dir: Path, target: str, agent_name: str,
             sessions = d.get("Sessions", "[]")
             out.append(f"- **{d['id']}**: avoid {avoid}\n")
             out.append(_bundle_quotes(forge_dir, d["id"]))
+            out.append(_near_duplicate_annotation(forge_dir, d, "D", dead_ends))
             if lesson:
                 out.append(f"  - *Lesson*: {lesson}\n")
             if could and could != "not_explored":
@@ -419,6 +525,21 @@ def _print_summary(forge_dir: Path, out_path: Path, target: str, since) -> None:
     if staged_pending:
         sys.stderr.write(f"  · {staged_pending} observation{'s' if staged_pending != 1 else ''} "
                          f"still in staging (need more sessions)\n")
+
+    # Count "Possibly redundant" annotations in the proposal so the user
+    # notices the bloat warning without having to open the file.
+    try:
+        proposal_text = out_path.read_text(encoding="utf-8")
+        redundant_count = proposal_text.count("⚠ *Possibly redundant*")
+        already_in_count = proposal_text.count("⚠ *Already in your")
+        if redundant_count or already_in_count:
+            sys.stderr.write(
+                f"  ⚠ {redundant_count + already_in_count} possible redundancy "
+                f"warning{'s' if redundant_count + already_in_count != 1 else ''} "
+                f"in this proposal — review before pasting\n"
+            )
+    except Exception:
+        pass
 
     sys.stderr.write("\n")
     sys.stderr.write(f"  Full proposal — open or paste from:\n")
