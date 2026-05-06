@@ -19,6 +19,20 @@ All notable changes to this project are documented in this file. The format is b
 - New eval fixture `near_duplicate_heuristic` (two sessions producing
   near-duplicate heuristics) + 26 unit tests in `test_similarity.py` +
   3 integration tests in `test_propose_claude_md.py`.
+- **Suggested-removal annotations.** New `scripts/contradiction.py`
+  detects (a) lines in the existing `CLAUDE.md` / `AGENTS.md` that a
+  newly-crystallized rule appears to contradict (polarity-flip with
+  high token overlap), and (b) self-duplicates within the existing
+  file (token-Jaccard or subset relation between bullet lines). The
+  proposer adds `⚠ Suggested removal` annotations under each entry
+  and a `Cleanup — self-duplicates in your existing file` section
+  when applicable. Friendly stderr summary lists each warning type
+  separately. Polarity is detected from the rule's leading tokens so
+  mixed rules ("Use pnpm, never npm") aren't misclassified.
+- 28 unit tests in `test_contradiction.py` covering polarity
+  classification (EN + FR), contradiction detection over realistic
+  positive/negative pairs, self-duplicate scanning with header
+  filtering, and contradiction integration against existing CLAUDE.md.
 
 ### Fixed
 

@@ -197,3 +197,58 @@ def test_proposal_flags_against_existing_claude_md(tmp_path):
         "Proposal did not flag the existing CLAUDE.md line. Got:\n"
         + proposal[:2000]
     )
+
+
+def test_proposal_flags_contradicted_existing_rule(tmp_path):
+    """A new positive rule about pnpm should flag an existing 'Don't use
+    pnpm' line in CLAUDE.md as a candidate for removal."""
+    fixture = REPO_ROOT / "evals" / "fixtures" / "simple_success.jsonl"
+    forge_dir = tmp_path / ".insight-forge"
+    project_root = tmp_path
+    (project_root / "CLAUDE.md").write_text(
+        "# Project rules\n\n"
+        "- Don't use pnpm in this repo.\n"
+        "- Tests live in tests/, not __tests__/\n",
+        encoding="utf-8",
+    )
+    proposal = _run_pipeline_then_propose(fixture, forge_dir)
+    assert "⚠ *Suggested removal*" in proposal, (
+        "Proposal did not flag the contradicted line. Got:\n"
+        + proposal[:2000]
+    )
+
+
+def test_proposal_flags_self_duplicate_in_existing_md(tmp_path):
+    """When CLAUDE.md contains two lines saying the same thing, the
+    proposal should surface them in a Cleanup section regardless of what
+    new rules crystallize. This is a one-time audit."""
+    fixture = REPO_ROOT / "evals" / "fixtures" / "simple_success.jsonl"
+    forge_dir = tmp_path / ".insight-forge"
+    project_root = tmp_path
+    (project_root / "CLAUDE.md").write_text(
+        "# Project rules\n\n"
+        "- Always use pnpm in this repo, never npm\n"
+        "- Use pnpm not npm in this repo\n"
+        "- Deploy with kubectl apply\n",
+        encoding="utf-8",
+    )
+    proposal = _run_pipeline_then_propose(fixture, forge_dir)
+    assert "Cleanup — self-duplicates" in proposal
+    assert "⚠ *Possible self-duplicate*" in proposal
+
+
+def test_proposal_does_not_invent_self_duplicates(tmp_path):
+    """A clean CLAUDE.md must NOT trigger the self-duplicate section."""
+    fixture = REPO_ROOT / "evals" / "fixtures" / "simple_success.jsonl"
+    forge_dir = tmp_path / ".insight-forge"
+    project_root = tmp_path
+    (project_root / "CLAUDE.md").write_text(
+        "# Project rules\n\n"
+        "- Use ruff for lint\n"
+        "- Tests live in tests/\n"
+        "- Deploy with kubectl apply\n",
+        encoding="utf-8",
+    )
+    proposal = _run_pipeline_then_propose(fixture, forge_dir)
+    assert "Cleanup — self-duplicates" not in proposal
+    assert "⚠ *Possible self-duplicate*" not in proposal
